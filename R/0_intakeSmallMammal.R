@@ -57,29 +57,30 @@ smam.data <- trap.night %>%
                   "larvalTicksAttached",
                   "nymphalTicksAttached",
                   "adultTicksAttached"))) %>% 
-  filter((!taxonRank %in% c("order", "class"))) %>% #, # get rid of high taxon classes
-         # trapStatus %in% c("4 - more than 1 capture in one trap", 
-                           # "5 - capture")) # keep only captured individuals
-  mutate(animalStatus = if_else(trapStatus == "4 - more than 1 capture in one trap" | 
+  filter((!taxonRank %in% c("order", "class"))) %>% # get rid of high taxon classes
+  mutate(animalInTrap = if_else(trapStatus == "4 - more than 1 capture in one trap" | 
                                 trapStatus == "5 - capture",
-                                1, 0))
+                                1, 0), # 1 = alive individual, 0 = no capture
+         animalInTrap = if_else(is.na(trapStatus), # very few records, but need the 0s in animalInTrap
+                                0, animalInTrap)) 
 
 # want the number of unique animals each day
+# and need to keep track of each individual
 # will go by unique tag
-# some tags have been replaced, deal with those first
+# some tags have been replaced
 # the majority of tags replaced are just left or right
 # and the tag number is the same
 # Some have a new tag number, need to demarcate those
 # the tagID in the replacedTag column is the old tag
 
-# arrange by collect date to make replacing easier
+# arrange by collect date within plots to make replacing easier
 smam.data <- smam.data %>% 
-  arrange(collectDate) 
+  arrange(plotID, collectDate) 
 
 tag.pattern <- "[[:upper:]]\\d{4}" # end of tagID - what is replaced; old tag
 new.tag.rows <- grep(tag.pattern, smam.data$replacedTag) # rows when new tags used
 old.tag.id <- smam.data$replacedTag[new.tag.rows] # old tag Ids
-new.tag.id <- smam.data$tagID[new.tag.rows] # the tags that were replaced
+new.tag.id <- smam.data$tagID[new.tag.rows] # new tags
 
 for(i in seq_along(new.tag.id)){
   
@@ -92,12 +93,29 @@ for(i in seq_along(new.tag.id)){
   }
 }
 
-# TO_DO
-# check to make sure at least one animal was captured each trap night
-smam.data %>% 
-  group_by(plotID, collectDate) %>% 
-  summarise()
+# there are thousands of trap nights were 0 animals were captured
+# for capture history matrix we need every day, but do not need each empty trap
 
+# zero capture nights
+zero.captured <- smam.data %>% 
+  group_by(nightuid) %>% 
+  summarise(n = sum(animalInTrap)) %>% 
+  ungroup() %>% 
+  filter(n == 0) %>% 
+  select(-n)
+
+# keep one record for each 0 night
+smam.0 <- smam.data %>% 
+  filter(nightuid %in% zero.captured$nightuid) %>% 
+  distinct(nightuid, .keep_all = TRUE)
+
+# mark dead animals 
+smam.data <- smam.data %>% 
+  filter(trapStatus %in% c("4 - more than 1 capture in one trap", 
+                           "5 - capture")) %>%  # keep only captured individuals
+  mutate(animalInTrap = if_else(fate == "dead", 
+                                2, animalInTrap)) %>%  # 2 = dead
+  bind_rows(smam.0)
 
 
 write_csv(smam.data, "Data/allSmallMammals.csv")
