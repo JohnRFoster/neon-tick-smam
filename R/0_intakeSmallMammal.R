@@ -12,21 +12,19 @@ library(neonstore)
 library(lubridate)
 library(uuid)
 
-dir.neonstore <- "/projectnb/dietzelab/fosterj/Data/neonstore/"
-Sys.setenv("NEONSTORE_HOME" = dir.neonstore)
-Sys.setenv("NEONSTORE_DB" = dir.neonstore)
+# NEONSTORE_HOME, NEONSTORE_DB, and NEON_TOKEN defined in .Renviron
 
-smam.product <- "DP1.10072.001"
 
 #### Last check 2021-10-06
-# neon_download(product = smam.product,
-#               .token = Sys.getenv("NEON_TOKEN"))
+# smam.product <- "DP1.10072.001"
+# neon_download(product = smam.product)
 
 # tables - can join by "nightuid"
 # plot.night <- neon_read("mam_perplotnight") # per trapping grid data
 trap.night <- neon_read("mam_pertrapnight") # per trap night data
+df.raw <- trap.night
 
-smam.data <- trap.night %>% 
+smam.data <- df.raw %>% 
   mutate(collectYear = year(collectDate),
          collectMonth = month(collectDate),
          collectYearMonth = paste(collectYear, collectMonth, sep = "-")) %>% 
@@ -117,6 +115,9 @@ smam.data <- smam.data %>%
                                 2, animalInTrap)) %>%  # 2 = dead
   bind_rows(smam.0)
 
+
+smam.data <- smam.data %>% 
+  arrange(siteID, plotID, collectDate) 
 
 write_csv(smam.data, "Data/allSmallMammals.csv")
 
