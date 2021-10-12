@@ -62,6 +62,15 @@ smam.data <- df.raw %>%
          animalInTrap = if_else(is.na(trapStatus), # very few records, but need the 0s in animalInTrap
                                 0, animalInTrap)) 
 
+# as of 2021-10-06 nightuid has an error (mostly at ABBY in 2017)
+# where each trap has it's own nightuid, instead of the same nightuid
+# for the plotID_collectDate combination that it should be
+# we can just create a new column for our own use
+smam.data <- smam.data %>% 
+  group_by(plotID, collectDate) %>% 
+  mutate(captureNightUID = UUIDgenerate()) %>% 
+  ungroup() 
+
 # want the number of unique animals each day
 # and need to keep track of each individual
 # will go by unique tag
@@ -96,7 +105,7 @@ for(i in seq_along(new.tag.id)){
 
 # zero capture nights
 zero.captured <- smam.data %>% 
-  group_by(nightuid) %>% 
+  group_by(captureNightUID) %>% 
   summarise(n = sum(animalInTrap)) %>% 
   ungroup() %>% 
   filter(n == 0) %>% 
@@ -104,19 +113,21 @@ zero.captured <- smam.data %>%
 
 # keep one record for each 0 night
 smam.0 <- smam.data %>% 
-  filter(nightuid %in% zero.captured$nightuid) %>% 
-  distinct(nightuid, .keep_all = TRUE)
+  filter(captureNightUID %in% zero.captured$captureNightUID) %>% 
+  distinct(captureNightUID, .keep_all = TRUE)
 
 # mark dead animals 
 smam.data <- smam.data %>% 
   filter(trapStatus %in% c("4 - more than 1 capture in one trap", 
                            "5 - capture")) %>%  # keep only captured individuals
-  mutate(animalInTrap = if_else(fate == "dead", 
+  mutate(fate = if_else(is.na(fate), "noFateRecorded", fate), # change NAs, needed for next mutate
+         animalInTrap = if_else(fate == "dead", 
                                 2, animalInTrap)) %>%  # 2 = dead
   bind_rows(smam.0)
 
 
 smam.data <- smam.data %>% 
+  separate(scientificName, into = c("genusName", "speciesName"), sep = "\\s", extra = "merge") %>% 
   arrange(siteID, plotID, collectDate) 
 
 write_csv(smam.data, "Data/allSmallMammals.csv")
