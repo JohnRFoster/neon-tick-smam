@@ -34,10 +34,55 @@ capture_matrix <- function(unit, neon.smam, by_bout = FALSE){
   
   
   # control flow for by bout
-  ch <- df %>% 
-    select(tagID, collectDate, animalInTrap) %>% 
+  
+  # capture history with plot level identifiers
+  ch.by.plot <- df %>% 
+    # select(tagID, collectDate, animalInTrap, plotID) %>% 
+    mutate(plotNumber = as.numeric(as.factor(plotID)), # numeric plot id
+           plotCaptureStatus = plotNumber + animalInTrap - 1, # if seen, plot number
+           plotCaptureStatus = if_else(animalInTrap == 0, 0, plotCaptureStatus), # revert not-seen to 0
+           plotCaptureStatus = if_else(animalInTrap == 2, -1, plotCaptureStatus), # dead animals to -1
+           tagID = if_else(is.na(tagID) & animalInTrap == 0,
+                           "noCapture", # dates without captures, need for full matrix
+                           tagID)) %>% 
+    arrange(collectDate) %>% 
+    filter(!is.na(tagID)) 
+  
+  # need to figure out what to do about daily capture inconsistencies across plots 
+  ch <- ch.by.plot %>% 
+    select(tagID, collectDate, plotCaptureStatus) %>% 
     pivot_wider(names_from = collectDate,
-                values_from = animalInTrap)
+                # values_fn = length,
+                values_from = plotCaptureStatus,
+                values_fill = 0) %>% 
+    filter(tagID != "noCapture")
+  
+  # make sure mice that are recorded dead stay dead!
+  for(i in 1:nrow(ch)){
+    ind <- ch[i,]
+    if(any(ind == 2)){
+      tod <- which(ind == 2)
+      if(sum(ind[(tod+1):length(ind)]) > 0){
+        stop("Zombie mouse!")
+      }
+    }
+  }
+  
+  # get animal identifiers    
+  smam.ind <- pull(ch, tagID)
+  ids <- df %>% 
+    filter(tagID %in% smam.ind) %>% 
+    select(tagID, genusName, speciesName, nlcdClass, siteID, plotID) %>% 
+    distinct() 
+  
+  # if animals are identified differently after first capture
+  # or found in more than one plot
+  if(nrow(ids) != nrow(ch)){
     
+  }
+  
+  # might want to do plots by time and individual?
+    
+  
   
 }
