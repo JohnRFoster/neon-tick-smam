@@ -46,11 +46,12 @@ capture_matrix <- function(unit, neon.smam, by_bout = FALSE){
                            "noCapture", # dates without captures, need for full matrix
                            tagID)) %>% 
     arrange(collectDate) %>% 
-    filter(!is.na(tagID)) 
+    filter(!is.na(tagID)) # some tags are just NA - remove
   
   # need to figure out what to do about daily capture inconsistencies across plots 
   ch <- ch.by.plot %>% 
     select(tagID, collectDate, plotCaptureStatus) %>% 
+    distinct() %>% 
     pivot_wider(names_from = collectDate,
                 # values_fn = length,
                 values_from = plotCaptureStatus,
