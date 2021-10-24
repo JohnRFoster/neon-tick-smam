@@ -104,7 +104,7 @@ j.model <- jags.model(file = textConnection(model.code),
                       n.adapt = n.adapt)
 
 for(i in 1:n.loops){
-  
+  loop.start <- Sys.time()
   jags.out <- coda.samples(j.model,
                            variable.names = monitor,
                            thin = thin,
@@ -113,6 +113,10 @@ for(i in 1:n.loops){
   loop.time <- Sys.time() - loop.start
   cat(n.iter, "iterations in\n")
   print(loop.time)
+  
+  total.time <- Sys.time() - start.time
+  cat("Total run time\n")
+  print(total.time)
   
   ## split output
   out <- list(params = NULL, predict = NULL)
