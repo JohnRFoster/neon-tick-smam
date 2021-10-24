@@ -103,8 +103,8 @@ model.code <- " model {
   # likelihood
   for(i in 1:n.ind){
   
-    # x[i, first[i]] <- y[i,first[i]]
-    x[i, first[i]] ~ dcat(Y1)
+    x[i, first[i]] <- y[i,first[i]]
+    # x[i, first[i]] ~ dcat(Y1)
     
     for(t in (first[i]+1):n.occasions){
     
@@ -118,6 +118,7 @@ model.code <- " model {
 
 }"
 
+# variables to monitor
 monitor <-
   c("phi.a",      # probability of mice survival with ticks absent
     "phi.p",      # probability of mice survival with ticks present
@@ -128,6 +129,7 @@ monitor <-
     "p.d",      # probability of observing a dead mouse 
     "gamma"  # probability of marking alive mouse unknown tick status when ticks are absent
     )
+
 
 
 
