@@ -51,20 +51,20 @@ model.code <- " model {
     Rd[t] <- p.d
     Ra[t] <- p.a
     Rp[t] <- p.p
-    Ga[t] <- gamma
+    G[t] <- gamma
   }
   
   for(i in 1:n.ind){
     for(t in first[i]:(n.occasions-1)){
     
       # transition matrix - probabilities of state S(t+1) given S(t)
-      ps[1,i,t,1] <- Sa[t] * (1 - Fap[t])
-      ps[1,i,t,2] <- Sa[t] * Fap[t]
-      ps[1,i,t,3] <- 1 - Sa[t]
+      ps[1,i,t,1] <- Sp[t] * (1 - Fpa[t])
+      ps[1,i,t,2] <- Sp[t] * Fpa[t]
+      ps[1,i,t,3] <- 1 - Sp[t]
       ps[1,i,t,4] <- 0
-      ps[2,i,t,1] <- Sp[t] * Fpa[t]
-      ps[2,i,t,2] <- Sp[t] * (1 - Fpa[t])
-      ps[2,i,t,3] <- 1 - Sp[t]
+      ps[2,i,t,1] <- Sa[t] * Fap[t]
+      ps[2,i,t,2] <- Sa[t] * (1 - Fap[t])
+      ps[2,i,t,3] <- 1 - Sa[t]
       ps[2,i,t,4] <- 0
       ps[3,i,t,1] <- 0
       ps[3,i,t,2] <- 0
@@ -76,16 +76,16 @@ model.code <- " model {
       ps[4,i,t,4] <- 1
       
       # observation matrix - probabilities of O(t) given S(t)
-      po[1,i,t,1] <- Ga[t] * (1 - Ra[t])
-      po[1,i,t,2] <- Ra[t]
-      po[1,i,t,3] <- 0
+      po[1,i,t,1] <- Rp[t] 
+      po[1,i,t,2] <- 0 
+      po[1,i,t,3] <- G[t] * (1 - Rp[t])
       po[1,i,t,4] <- 0
-      po[1,i,t,5] <- 1 - Ra[t]
-      po[2,i,t,1] <- Ga[t] * (1 - Rp[t])
-      po[2,i,t,2] <- 0
-      po[2,i,t,3] <- Rp[t]
+      po[1,i,t,5] <- 1 - Rp[t]
+      po[2,i,t,1] <- 0 
+      po[2,i,t,2] <- Ra[t]
+      po[2,i,t,3] <- G[t] * (1 - Ra[t])
       po[2,i,t,4] <- 0
-      po[2,i,t,5] <- 1 - Rp[t]
+      po[2,i,t,5] <- 1 - Ra[t]
       po[3,i,t,1] <- 0
       po[3,i,t,2] <- 0
       po[3,i,t,3] <- 0

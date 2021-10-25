@@ -22,12 +22,12 @@ capture_matrix <- function(site, neon.smam, by_bout = FALSE){
   mice.days <- df %>% pull(collectDate) %>% unique()
   
   # the states that we need are:
-  alive.u <- 1      # observed mouse with unknown tick status
+  alive.p <- 1      # observed mouse with tick attached
   alive.a <- 2      # observed mouse without tick attached
-  alive.p <- 3      # observed mouse with tick attached
-  dead.u <- 4       # observed mouse with unknown tick status
-  dead.a <- 5       # observed mouse without tick attached
-  dead.p <- 6       # observed mouse with tick attached
+  alive.u <- 3      # observed mouse with unknown tick status
+  dead.p <- 4       # observed mouse with tick attached
+  dead.u <- 5       # observed mouse with unknown tick status
+  dead.a <- 6       # observed mouse without tick attached
   unobserved <- 7   # unobserved
   
   
@@ -94,8 +94,6 @@ capture_matrix <- function(site, neon.smam, by_bout = FALSE){
   if(nrow(ch) != total.ind) stop("Conflicting individuals in data vs capture matrix")
   
   # make sure mice that are recorded dead stay dead! 
-  mice.found.dead <- which(apply(ch, 1, function(x) any(x %in% c(dead.u, dead.a, dead.p)))) # mice that died
-  
   # all days after found dead should be unobserved
   check.dead <- function(x){
     if(any(x %in% c(dead.u, dead.a, dead.p))){
@@ -108,11 +106,21 @@ capture_matrix <- function(site, neon.smam, by_bout = FALSE){
     }
   }
   
-  dead.test <- apply(ch[mice.found.dead,], 1, check.dead)
-  if(all(dead.test != 1)) stop("Zombie mouse!")
+  mice.found.dead <- which(apply(ch, 1, function(x) any(x %in% c(dead.u, dead.a, dead.p)))) # mice that died
+  if(length(mice.found.dead) >= 1){
+    dead.test <- apply(ch[mice.found.dead,], 1, check.dead)
+    if(all(dead.test != 1)) stop("Zombie mouse!")
+  }
   
   # change the unobserved state to 0
   # ch[ch == unobserved] <- 0
   
-  return(as.matrix(ch)) 
+  return(list(ch = as.matrix(ch),
+              alive.p = alive.p,
+              alive.a = alive.a,
+              alive.u = alive.u,
+              dead.p = dead.p,
+              dead.u = dead.u,
+              dead.a = dead.a,
+              unobserved = unobserved))
 }
