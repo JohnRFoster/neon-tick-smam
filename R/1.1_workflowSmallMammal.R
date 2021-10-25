@@ -24,7 +24,7 @@ sites <- site.coord %>% pull(siteID)
 
 # jags arguments
 if(production) {
-  n.adapt <- 5000
+  n.adapt <- 2500
   thin <- 1
   n.iter <- 100000
   n.loops <- 1000
@@ -60,7 +60,7 @@ site.dir <- file.path(out.dir, model.dir, site)
 if(!dir.exists(site.dir)) dir.create(site.dir, recursive = TRUE)
   
 start.time <- Sys.time()
-message(paste("Running mouse model at", site, start.time))
+message(paste("Fitting mouse model at", site, start.time))
 message(paste0("Chain: ", chain))
   
 source("R/4.1_setup_smallMammal.R")

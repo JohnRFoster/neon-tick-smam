@@ -8,7 +8,7 @@ library(rjags)
 load.module("glm")
 
 # neon small mammal data
-df <- read_csv("Data/allSmallMammals.csv") 
+df <- read_csv("Data/allSmallMammals.csv") %>% suppressMessages()
 
 # get capture history matrix
 source("Functions/capture_matrix.R")
@@ -114,11 +114,17 @@ inits <- function(){list(
   gamma = abs(min(jitter(gamma.init), 1))       # probability of marking alive mouse unknown tick status when ticks are absent
 )}
 
+message(paste0("Capture history matrix has ", nrow(ch), " rows and ", ncol(ch), " columns"))
+message(paste0("Compiling JAGS with ", n.adapt, " adaptive iterations..."))
+
+compile.start <- Sys.time()
 j.model <- jags.model(file = textConnection(model.code),
                       data = data,
                       inits = inits,
                       n.chains = 1,
                       n.adapt = n.adapt)
+message("JAGS model compiled. Compile time:")
+print(Sys.time()-compile.start)
 
 for(i in 1:n.loops){
   loop.start <- Sys.time()

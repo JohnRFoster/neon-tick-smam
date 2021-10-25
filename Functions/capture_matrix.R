@@ -44,16 +44,20 @@ capture_matrix <- function(site, neon.smam, by_bout = FALSE){
   }
 
   # the total number of unique tags
-  total.ind <- df %>% filter(!is.na(tagID)) %>% 
+  total.ind <- df %>% 
+    filter(!is.na(tagID)) %>% 
     pull(tagID) %>% 
     unique() %>% 
     length()
   
   # get the state of each mouse at each trap night
   df.state <- df %>% 
-    mutate(tickOn = if_else(adultTicksAttached == "Y" |                # any life stage observed
+    mutate(tickOn = if_else(adultTicksAttached == "U" |                # any life stage unknown
+                              nymphalTicksAttached == "U" |
+                              larvalTicksAttached == "U", 3, 0),
+           tickOn = if_else(adultTicksAttached == "Y" |                # any life stage observed
                               nymphalTicksAttached == "Y" |
-                              larvalTicksAttached == "Y", 1, 0),
+                              larvalTicksAttached == "Y", 1, tickOn),
            tickOn = if_else(adultTicksAttached == "N" &                # all life stages not observed
                               nymphalTicksAttached == "N" &
                               larvalTicksAttached == "N", 2, tickOn),
@@ -73,13 +77,16 @@ capture_matrix <- function(site, neon.smam, by_bout = FALSE){
     select(tagID, collectDate, state) %>% 
     filter(!is.na(tagID)) 
   
+  # states should all have >0 designation
+  if(any(df.state$state == 0)) stop("All possible states unaccounted for")
+  
   # add missing days
-  df.all.days <- bind_rows(df.state, fill.days) %>% 
-    mutate(state = if_else(state == 0, unobserved, state))
+  df.all.days <- bind_rows(df.state, fill.days) 
   
   ch <- df.all.days %>% 
     group_by(collectDate, tagID) %>%
-    summarise(state = min(state)) %>%  # conflicting states get unknown designation
+    distinct() %>% 
+    # summarise(state = min(state)) %>%  # conflicting states get unknown designation
     ungroup() %>%
     arrange(collectDate) %>% 
     pivot_wider(names_from = collectDate,
