@@ -8,7 +8,7 @@ library(rjags)
 load.module("glm")
 
 # neon small mammal data
-df <- read_csv("Data/allSmallMammals.csv")
+df <- read_csv("Data/allSmallMammals.csv") 
 
 # get capture history matrix
 source("Functions/capture_matrix.R")
@@ -50,34 +50,37 @@ mice.found.dead <- which(apply(ch, 1, function(x) any(x == dead)))
 # supply known states
 # anything coded as unobserved or unknown tick status get NA
 # anything after a death gets absorbing state code
-known_state_ms <- function(ms, notseen, unknown, dead, dead.ind){
+known_state_ms <- function(ms, f, notseen, unknown, dead, dead.ind){
   state <- ms
+  latent.dead <- dead - 1
   state[state == notseen] <- NA
   state[state == unknown] <- NA
+  state[state == dead] <- latent.dead
   if(length(dead.ind) >= 1){
     for(i in 1:length(dead.ind)){
       n3 <- which(ms[dead.ind[i],] == dead)
-      states[dead.ind[i], (n3+1):nrow(ms)] <- dead + 1
+      state[dead.ind[i], (n3+1):ncol(ms)] <- latent.dead + 1
     }
   }
+  # state[,1] <- NA
   return(state)
 }
 
 # latent state initial condition
 # anything after first capture and NA in x.known gets a guess
-x_inits <- function(ks, f, alive.vec){
+x_inits <- function(ks, f){
   states <- ks
   v <- which(is.na(states))
   states[-v] <- NA
-  states[v] <- sample(alive.vec, length(v), replace = TRUE)
+  states[v] <- rbinom(length(v), 1, 0.5) + 1
   for (i in 1:nrow(ks)){
-    states[i, 1:f[i]] <- NA
+    if(f[i] > 1) states[i, 1:(f[i]-1)] <- NA
   }
   return(states)
 }
 
-x.known <- known_state_ms(ch, unobserved, alive.u, dead, mice.found.dead)
-x.inits <- x_inits(x.known, f, c(alive.a, alive.p, alive.u))
+x.known <- known_state_ms(ch, f, unobserved, alive.u, dead, mice.found.dead)
+x.inits <- x_inits(x.known, f)
 
 # create data list
 data <- list(
@@ -87,21 +90,28 @@ data <- list(
   n.ind = nrow(ch),
   n.occasions = ncol(ch),
   first = f
-  )
+)
 
+# calculate some inits from ch
+n.alive <- length(ch[ch %in% c(alive.a, alive.p, alive.u)]) # total captured alive
+n.captured <- length(ch[ch != unobserved]) # total captured
 
+p.a.init <- length(ch[ch == alive.a]) / n.alive # proportion captured without ticks
+p.p.init <- length(ch[ch == alive.p]) / n.alive # proportion captured with ticks
+p.d.init <- length(ch[ch == dead]) / n.captured # proportion captured dead
+gamma.init <- length(ch[ch == alive.u]) / n.alive # proportion captured without ticks
 
 # inits for parameters
 inits <- function(){list(
-  x = x_inits(x.known, f, c(alive.a, alive.p, alive.u)),
+  x = x_inits(x.known, f),
   phi.a = runif(1, 0.9, 1),      # probability of mice survival with ticks absent
   phi.p = runif(1, 0.9, 1),      # probability of mice survival with ticks present
-  psi.ap = runif(1, 0.5, 1),     # probability of mice transition from tick absent to tick present
-  psi.pa = runif(1, 0.5, 1),     # probability of mice transition from tick present to tick absent
-  p.a = runif(1, 0.5, 1),        # probability of observing a mouse with ticks absent
-  p.p = runif(1, 0.5, 1),        # probability of observing a mouse with ticks present
-  p.d = runif(1, 0, 0.1),        # probability of observing a dead mouse 
-  gamma = runif(1, 0.9, 1)       # probability of marking alive mouse unknown tick status when ticks are absent
+  psi.ap = runif(1, 0, 1),     # probability of mice transition from tick absent to tick present
+  psi.pa = runif(1, 0, 1),     # probability of mice transition from tick present to tick absent
+  p.a = abs(min(jitter(p.a.init), 1)),        # probability of observing a mouse with ticks absent
+  p.p = abs(min(jitter(p.p.init), 1)),        # probability of observing a mouse with ticks present
+  p.d = abs(min(jitter(p.d.init), 1)),        # probability of observing a dead mouse 
+  gamma = abs(min(jitter(gamma.init), 1))       # probability of marking alive mouse unknown tick status when ticks are absent
 )}
 
 j.model <- jags.model(file = textConnection(model.code),
@@ -118,11 +128,14 @@ for(i in 1:n.loops){
                            n.iter = n.iter)
   
   loop.time <- Sys.time() - loop.start
-  cat(n.iter, "iterations in\n")
+  message(paste0(n.iter, " iterations in"))
   print(loop.time)
   
+  total.iter <- i*n.iter
+  message(paste0("For a total of ", total.iter, " iterations"))
+  
   total.time <- Sys.time() - start.time
-  cat("Total run time\n")
+  message("Total run time of")
   print(total.time)
   
   ## split output
@@ -132,9 +145,9 @@ for(i in 1:n.loops){
   chain.col <- which(colnames(mfit) == "CHAIN")
   out$predict <- ecoforecastR::mat2mcmc.list(mfit[, c(chain.col, pred.cols)])
   out$params <- ecoforecastR::mat2mcmc.list(mfit[, -pred.cols])
-  out <- list(out = out, j.model = return$j.model)
+  out <- list(out = out, jags.model = j.model)
   
-  iter <- paste0(site, "_", chain.num, "_", i, ".RData")
+  iter <- paste0(site, "_", chain, "_", i, ".RData")
   
   save(out, 
        monitor,
