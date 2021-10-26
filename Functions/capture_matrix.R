@@ -1,8 +1,12 @@
 #' this function reads the small mammal csv and creates a 
 #' capture history matrix for given scale
-#' 0 = not captured
-#' 1 = alive
-#' 2 = dead
+#' 1 = alive - ticks present
+#' 2 = alive - ticks absent
+#' 3 = alive - ticks unknown
+#' 4 = dead - ticks present
+#' 5 = dead - ticks absent
+#' 6 = dead - ticks unknown
+#' 7 = not seen
 #' 
 #' @param site the unit to extract; "HARV"
 #' @param neon.smam the small mammal neon.smam frame from the csv in /Data
