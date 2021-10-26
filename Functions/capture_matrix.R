@@ -4,12 +4,11 @@
 #' 1 = alive
 #' 2 = dead
 #' 
-#' @param site the unit to extract; plot ("HARV_016"), site ("HARV"), domain ("D02")
-#' @param neon.smam the small mammal neon.smam frame from the csv in /neon.smam
-#' @param by_bout should capture history be for each collectDate (the default) or by trapping bout?
+#' @param site the unit to extract; "HARV"
+#' @param neon.smam the small mammal neon.smam frame from the csv in /Data
 
 
-capture_matrix <- function(site, neon.smam, by_bout = FALSE){
+capture_matrix <- function(site, neon.smam){
   
   neon.df <- neon.smam %>% 
     filter(siteID == site)
@@ -86,7 +85,7 @@ capture_matrix <- function(site, neon.smam, by_bout = FALSE){
   ch <- df.all.days %>% 
     group_by(collectDate, tagID) %>%
     distinct() %>% 
-    # summarise(state = min(state)) %>%  # conflicting states get unknown designation
+    summarise(state = min(state)) %>%  # conflicting states get unknown designation
     ungroup() %>%
     arrange(collectDate) %>% 
     pivot_wider(names_from = collectDate,

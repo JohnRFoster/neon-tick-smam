@@ -24,10 +24,12 @@ sites <- site.coord %>% pull(siteID)
 
 # jags arguments
 if(production) {
-  n.adapt <- 2500
+  n.adapt <- 1000
   thin <- 1
-  n.iter <- 100000
+  n.iter <- 10000
   n.loops <- 1000
+  
+  # sites <- c("HARV", "KONZ", "BLAN")
   
   jobs <- tibble(site = rep(sites, each = n.chains),
                  chain = rep(1:n.chains, length(sites)))
