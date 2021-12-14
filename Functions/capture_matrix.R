@@ -105,25 +105,36 @@ capture_matrix <- function(site, neon.smam){
   
   # make sure mice that are recorded dead stay dead! 
   # all days after found dead should be unobserved
-  check.dead <- function(x){
-    if(any(x %in% c(dead.u, dead.a, dead.p))){
-      day.dead <- which(x %in% c(dead.u, dead.a, dead.p))
-      if(all(x[(day.dead+1):length(x)] == unobserved)){
-        return(1)
-      } else {
-        return(2)
+  # assume that if there is a case of a zombie mouse,
+  # the dead recording is true and the following capture
+  # is an error in reading the tag number
+  for(z in 1:nrow(ch)){
+    if(any(ch[z,] %in% c(dead.u, dead.a, dead.p))){
+      # print(z)
+      day.dead <- which(ch[z,] %in% c(dead.u, dead.a, dead.p))
+      if(day.dead < ncol(ch)) {
+        if(!all(ch[z,(day.dead+1):ncol(ch)] == unobserved)){
+          ch[z,(day.dead+1):ncol(ch)] <- unobserved
+        }  
       }
     }
   }
   
-  mice.found.dead <- which(apply(ch, 1, function(x) any(x %in% c(dead.u, dead.a, dead.p)))) # mice that died
-  if(length(mice.found.dead) >= 1){
-    dead.test <- apply(ch[mice.found.dead,], 1, check.dead)
-    if(all(dead.test != 1)) stop("Zombie mouse!")
-  }
+  # dates and deltas
+  # all days trapped
+  capture.dates <- df.all.days %>% 
+    pull(collectDate) %>% 
+    unique() %>% 
+    sort()
   
-  # change the unobserved state to 0
-  # ch[ch == unobserved] <- 0
+  # every day in time series
+  every.day <- seq.Date(first(capture.dates), last(capture.dates), by = 1)
+  
+  # the index where each capture occasion happens in time series
+  capture.index <- which(every.day %in% capture.dates)
+  
+  # the number of days between capture occasions
+  delta.days <- diff.Date(capture.dates) %>% as.numeric()
   
   return(list(ch = as.matrix(ch),
               alive.p = alive.p,
@@ -132,5 +143,9 @@ capture_matrix <- function(site, neon.smam){
               dead.p = dead.p,
               dead.u = dead.u,
               dead.a = dead.a,
-              unobserved = unobserved))
+              unobserved = unobserved,
+              capture.dates = capture.dates,
+              every.day = every.day,
+              capture.index = capture.index,
+              delta.days = delta.days))
 }
