@@ -40,7 +40,7 @@ model.code <- " model {
   p.a ~ dunif(0, 1)      # probability of observing a mouse with ticks absent
   p.p ~ dunif(0, 1)      # probability of observing a mouse with ticks present
   p.d ~ dunif(0, 1)      # probability of observing a dead mouse
-  gamma ~ dunif(0, 1)    # probability of marking an alive mouse as unknown tick status 
+  p.u ~ dunif(0, 1)    # probability of marking an alive mouse as unknown tick status 
   
   # parameters remain constant for each trapping occasion
   for(t in 1:(n.occasions-1)){
@@ -51,7 +51,7 @@ model.code <- " model {
     Rd[t] <- p.d
     Ra[t] <- p.a
     Rp[t] <- p.p
-    G[t] <- gamma
+    Ru[t] <- p.u
   }
   
   for(i in 1:n.ind){
@@ -60,12 +60,12 @@ model.code <- " model {
       # transition matrix - probabilities of state S(t+1) given S(t)
       ps[1,i,t,1] <- Sp[t] * (1 - Fpa[t])
       ps[1,i,t,2] <- Sp[t] * Fpa[t]
-      ps[1,i,t,3] <- 1 - Sp[t]
-      ps[1,i,t,4] <- 0
+      ps[1,i,t,3] <- (1 - Sp[t]) * Rd[t]
+      ps[1,i,t,4] <- (1 - Sp[t]) * (1 - Rd[t])
       ps[2,i,t,1] <- Sa[t] * Fap[t]
       ps[2,i,t,2] <- Sa[t] * (1 - Fap[t])
-      ps[2,i,t,3] <- 1 - Sa[t]
-      ps[2,i,t,4] <- 0
+      ps[2,i,t,3] <- (1 - Sa[t]) * Rd[t]
+      ps[2,i,t,4] <- (1 - Sa[t]) * (1 - Rd[t])
       ps[3,i,t,1] <- 0
       ps[3,i,t,2] <- 0
       ps[3,i,t,3] <- 0
@@ -76,21 +76,21 @@ model.code <- " model {
       ps[4,i,t,4] <- 1
       
       # observation matrix - probabilities of O(t) given S(t)
-      po[1,i,t,1] <- Rp[t] 
+      po[1,i,t,1] <- Rp[t]
       po[1,i,t,2] <- 0 
-      po[1,i,t,3] <- G[t] * (1 - Rp[t])
+      po[1,i,t,3] <- Ru[t] * (1 - Rp[t])
       po[1,i,t,4] <- 0
-      po[1,i,t,5] <- 1 - Rp[t]
+      po[1,i,t,5] <- (1 - Ru[t])*(1 - Rp[t])
       po[2,i,t,1] <- 0 
       po[2,i,t,2] <- Ra[t]
-      po[2,i,t,3] <- G[t] * (1 - Ra[t])
+      po[2,i,t,3] <- Ru[t] * (1 - Ra[t])
       po[2,i,t,4] <- 0
-      po[2,i,t,5] <- 1 - Ra[t]
+      po[2,i,t,5] <- (1 - Ru[t])*(1 - Ra[t])
       po[3,i,t,1] <- 0
       po[3,i,t,2] <- 0
       po[3,i,t,3] <- 0
-      po[3,i,t,4] <- Rd[t]
-      po[3,i,t,5] <- 1 - Rd[t]
+      po[3,i,t,4] <- 1
+      po[3,i,t,5] <- 0
       po[4,i,t,1] <- 0
       po[4,i,t,2] <- 0
       po[4,i,t,3] <- 0
@@ -127,7 +127,7 @@ monitor <-
     "p.a",      # probability of observing a mouse with ticks absent
     "p.p",      # probability of observing a mouse with ticks present
     "p.d",      # probability of observing a dead mouse 
-    "gamma",  # probability of marking alive mouse unknown tick status when ticks are absent
+    "p.u",  # probability of marking alive mouse unknown tick status when ticks are absent
     "x"
     )
 
