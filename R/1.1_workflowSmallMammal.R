@@ -3,51 +3,48 @@
 # ========================================================== #
 
 library(tidyverse)
+library(parallel)
+library(nimble)
+library(nimbleEcology)
 
-# load model
-source("R/2.1_multiStateBasic.R")
 
-out.dir <- "/projectnb/dietzelab/fosterj/FinalOut/neon-tick-smam/mice"
-model.dir <- "multiStateBasic"
+
 
 # script flow
+n.slots <- 4
 production <- TRUE
+HB <- TRUE
 run.intake <- FALSE
 check.neon <- FALSE
-run.parallel <- FALSE
-array.job <- FALSE
-n.chains <- 4
+
+out.dir <- "/projectnb/dietzelab/fosterj/FinalOut/neon-tick-smam/mice"
+model.dir <- "multiStateDailySurvivalTransition"
+
 
 # sites to run
-site.coord <- readr::read_csv("Data/siteLatLon.csv")
+site.coord <- readr::read_csv("Data/siteLatLon.csv") %>% suppressMessages()
 sites <- site.coord %>% pull(siteID)
+
+# done.sites <- c("LENO", "OSBS", "TALL", "TEAK", "DELA")
+# sites <- sites[!(sites %in% done.sites)]
+# sites <- c("HARV", "SOAP")
 
 # jags arguments
 if(production) {
-  n.adapt <- 1000
+  n.burnin <- 0
   thin <- 1
-  n.iter <- 10000
-  n.loops <- 1000
-  
-  # sites <- c("HARV", "KONZ", "BLAN")
-  
-  jobs <- tibble(site = rep(sites, each = n.chains),
-                 chain = rep(1:n.chains, length(sites)))
-  
-  # run the model individually at each site
-  array.num <- as.numeric(Sys.getenv("SGE_TASK_ID")) # read array job number
-  site <- jobs %>% slice(array.num) %>% pull(site)
-  chain <- jobs %>% slice(array.num) %>% pull(chain)
+  n.iter <- 50000
+  max.iter <- 7e6
   
 } else { # testing / dev
-  n.adapt <- 50
+  n.burnin <- 0
   thin <- 1
-  n.iter <- 50
-  n.loops <- 10
-  site <- sites[sample(length(sites), 1)]
-  chain <- 1
+  n.iter <- 100
+  max.iter <- 1000000
+  ind.test <- 50
+  n.occ.test <- 100
+  model.dir <- paste0(model.dir, "_test")
 }
-
 
 # do we need to run the intake script?
 if(run.intake){
@@ -57,15 +54,36 @@ if(run.intake){
   message(paste0("Mouse intake complete at ", Sys.time()))
 }
 
+# run the model individually at each site
+if(HB){
+  # load model
+  source("R/2.3_multiStateHBDailySurvivalTransition.R")
+  
+  n.iter <- 1000
+  site.dir <- file.path(out.dir, model.dir)
+} else {
+  # load model
+  source("R/2.2_multiStateDailySurvivalTransitionNimble.R")
+  
+  # array.num <- as.numeric(Sys.getenv("SGE_TASK_ID")) # read array job number
+  # site <- sites[array.num]
+  site <- "HARV"
+  site.dir <- file.path(out.dir, model.dir, site)
+} 
+
 # create file path for output
-site.dir <- file.path(out.dir, model.dir, site)
 if(!dir.exists(site.dir)) dir.create(site.dir, recursive = TRUE)
   
 start.time <- Sys.time()
-message(paste("Fitting mouse model at", site, start.time))
-message(paste0("Chain: ", chain))
+message(paste("Number of slots (chains):", n.slots))
   
-source("R/4.1_setup_smallMammal.R")
+if(HB){
+  message(paste("Fitting hierarchical mouse model:", model.dir))
+  source("R/4.2_setup_smallMammalHB.R")
+} else {
+  message(paste("Fitting", model.dir, "at", site))
+  source("R/4.1_setup_smallMammal.R")
+}
   
 end.time <- Sys.time()
 message("Total run time:")
