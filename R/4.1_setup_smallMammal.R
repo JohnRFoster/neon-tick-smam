@@ -3,12 +3,12 @@
 
 
 library(tidyverse)
-library(rjags)
-
-load.module("glm")
 
 # neon small mammal data
 df <- read_csv("Data/allSmallMammals.csv") %>% suppressMessages()
+df <- df %>%
+  filter(collectYear >= 2016, # subset to training time frame 
+         collectYear <= 2020)
 
 # get capture history matrix
 source("Functions/capture_matrix.R")
@@ -23,15 +23,16 @@ dead.u <- ch$dead.u       # observed mouse with unknown tick status
 dead.a <- ch$dead.a       # observed mouse without tick attached
 dead.p <- ch$dead.p       # observed mouse with tick attached
 not.seen <- ch$unobserved   # unobserved
+capture.index <- ch$capture.index
+every.day <- ch$every.day
+n.days <- length(every.day)
 ch <- ch$ch
 
 if(!production){
-  ch <- ch[1:25,1:50] # for testing
+  ind.seq <- sample(nrow(ch), ind.test, replace = FALSE) %>% sort()
+  ch <- ch[ind.seq, ] # for testing
 }
 
-### TO DO
-# 1. FIX MODEL TO MATCH CODE SWITCH
-# 2. REMOVE DEATH 
 
 # move all recovered dead mice to same observation category "dead"
 # need to change unobserved category too
@@ -39,127 +40,226 @@ dead <- 4
 unobserved <- dead + 1
 ch[ch %in% c(dead.u, dead.a, dead.p)] <- dead
 ch[ch == not.seen] <- unobserved
+ch[is.na(ch)] <- 5
+no.captures <- which(apply(ch, 1, function(x) all(x == 5)))
+if(length(no.captures) > 0){
+  ch <- ch[-no.captures,]
+}
+
 
 # Compute date of first capture
 get.first <- function(x) min(which(x != unobserved))
 f <- apply(ch, 1, get.first)
 
-# are there any dead animals?
-mice.found.dead <- which(apply(ch, 1, function(x) any(x == dead))) 
-
-# supply known states
-# anything coded as unobserved or unknown tick status get NA
-# anything after a death gets absorbing state code
-known_state_ms <- function(ms, f, notseen, unknown, dead, dead.ind){
-  state <- ms
-  latent.dead <- dead - 1
-  state[state == notseen] <- NA
-  state[state == unknown] <- NA
-  state[state == dead] <- latent.dead
-  if(length(dead.ind) >= 1){
-    for(i in 1:length(dead.ind)){
-      n3 <- which(ms[dead.ind[i],] == dead)
-      state[dead.ind[i], (n3+1):ncol(ms)] <- latent.dead + 1
-    }
-  }
-  # state[,1] <- NA
-  return(state)
+if(any(f == ncol(ch))){
+  drop.rows <- which(f == ncol(ch))
+  ch <- ch[-drop.rows,]
+  f <- apply(ch, 1, get.first)
 }
 
-# latent state initial condition
-# anything after first capture and NA in x.known gets a guess
-x_inits <- function(ks, f){
-  states <- ks
-  v <- which(is.na(states))
-  states[-v] <- NA
-  states[v] <- rbinom(length(v), 1, 0.5) + 1
-  for (i in 1:nrow(ks)){
-    if(f[i] > 1) states[i, 1:(f[i]-1)] <- NA
-  }
-  return(states)
+if(any(f+1 == ncol(ch))){
+  drop.rows <- which(f+1 == ncol(ch))
+  ch <- ch[-drop.rows,]
+  f <- apply(ch, 1, get.first)
 }
 
-x.known <- known_state_ms(ch, f, unobserved, alive.u, dead, mice.found.dead)
+
+source("Functions/known_state_ms.R")
+x.known <- known_state_ms(ch, f, unobserved, alive.u, dead)
+
+source("Functions/x_inits.R")
 x.inits <- x_inits(x.known, f)
 
-# create data list
+x1 <- rep(1, length(f))
+for(i in 1:length(f)){
+  x1[i] <- x.known[i,f[i]]  
+  if(is.na(x1[i])) x1[i] <- rbinom(1, 1, 0.5) + 1
+  
+  # ch[i, 1:(f[i]-1)] <- NA
+}
+
+# Y1 <- c(
+#   length(x1[x1 == 1]) / length(f),
+#   length(x1[x1 == 2]) / length(f),
+#   length(x1[x1 == 3]) / length(f),
+#   0
+# )
+
+Y1 <- c(rep(1/3, 3), 0)
+
+
 data <- list(
-  x = x.known,
+  # x = x.known,
   y = as.matrix(ch),
-  Y1 = c(0.5, 0.5, 0, 0),
-  n.ind = nrow(ch),
-  n.occasions = ncol(ch),
-  first = f
+  Y1 = Y1
 )
 
-# calculate some inits from ch
-n.alive <- length(ch[ch %in% c(alive.a, alive.p, alive.u)]) # total captured alive
-n.captured <- length(ch[ch != unobserved]) # total captured
+constants <- list(
+  n.ind = nrow(ch),
+  n.occasions = ncol(ch),
+  n.days = n.days,
+  no = 5,
+  ns = 4,
+  f = f,
+  capture.index = capture.index
+)
 
-p.a.init <- length(ch[ch == alive.a]) / n.alive # proportion captured without ticks
-p.p.init <- length(ch[ch == alive.p]) / n.alive # proportion captured with ticks
-p.d.init <- length(ch[ch == dead]) / n.captured # proportion captured dead
-gamma.init <- length(ch[ch == alive.u]) / n.alive # proportion captured without ticks
 
-# inits for parameters
-inits <- function(){list(
-  x = x_inits(x.known, f),
-  phi.a = runif(1, 0.9, 1),      # probability of mice survival with ticks absent
-  phi.p = runif(1, 0.9, 1),      # probability of mice survival with ticks present
-  psi.ap = runif(1, 0, 1),     # probability of mice transition from tick absent to tick present
-  psi.pa = runif(1, 0, 1),     # probability of mice transition from tick present to tick absent
-  p.a = abs(min(jitter(p.a.init), 1)),        # probability of observing a mouse with ticks absent
-  p.p = abs(min(jitter(p.p.init), 1)),        # probability of observing a mouse with ticks present
-  p.d = abs(min(jitter(p.d.init), 1)),        # probability of observing a dead mouse 
-  gamma = abs(min(jitter(gamma.init), 1))       # probability of marking alive mouse unknown tick status when ticks are absent
-)}
+# mcmc.matrix <- "NIMBLE_samples.RData"
+# mcmc.obj <- "NIMBLE_check.RData"
+# 
+# init.file <- list.files(site.dir)
+# if(mcmc.matrix %in% init.file){
+#   load(file.path(site.dir, mcmc.matrix))
+#   init.samps <- as.matrix(samples$samples)
+# } else if(init.file == mcmc.obj){
+#   load(file.path(site.dir, mcmc.obj))
+#   init.samps <- as.matrix(save.ls$samples)
+# } else {
+#   init.samps <- matrix()
+# }
 
-message(paste0("Capture history matrix has ", nrow(ch), " rows and ", ncol(ch), " columns"))
-message(paste0("Compiling JAGS with ", n.adapt, " adaptive iterations..."))
+# init.df <- read_csv("Data/multiStateBasicParameterSamples.csv") 
+# init.samps <- init.df %>% 
+#   filter(Site == site,
+#          model == "multiStateBasic") %>% 
+#   select(-Site, -model)
 
-compile.start <- Sys.time()
-j.model <- jags.model(file = textConnection(model.code),
-                      data = data,
-                      inits = inits,
-                      n.chains = 1,
-                      n.adapt = n.adapt)
-message("JAGS model compiled. Compile time:")
-print(Sys.time()-compile.start)
-
-for(i in 1:n.loops){
-  loop.start <- Sys.time()
-  jags.out <- coda.samples(j.model,
-                           variable.names = monitor,
-                           thin = thin,
-                           n.iter = n.iter)
+max.rate <- 0.99999
   
-  loop.time <- Sys.time() - loop.start
-  message(paste0(n.iter, " iterations in"))
-  print(loop.time)
+if(FALSE){
+  init.mu <- apply(init.samps, 2, mean)
+  init.sd <- apply(init.samps, 2, sd)
   
-  total.iter <- i*n.iter
-  message(paste0("For a total of ", total.iter, " iterations"))
+  inits <- function(){list(
+    # x = x_inits(x.known, f),
+    phi.a = abs(min(rnorm(1, init.mu["phi.a"], init.sd['phi.a']), max.rate)),
+    phi.p = abs(min(rnorm(1, init.mu["phi.p"], init.sd['phi.p']), max.rate)),
+    psi.ap = abs(min(rnorm(1, init.mu["psi.ap"], init.sd['psi.ap']), max.rate)),     
+    psi.pa = abs(min(rnorm(1, init.mu["psi.pa"], init.sd['psi.pa']), max.rate)),     
+    p.a = abs(min(rnorm(1, init.mu["p.a"], init.sd['p.a']), max.rate)),
+    p.p = abs(min(rnorm(1, init.mu["p.p"], init.sd['p.p']), max.rate)),
+    p.d = abs(min(rnorm(1, init.mu["p.d"], init.sd['p.d']), max.rate)),
+    p.u = abs(min(rnorm(1, init.mu["p.u"], init.sd['p.u']), max.rate))
+  )}
   
-  total.time <- Sys.time() - start.time
-  message("Total run time of")
-  print(total.time)
+} else {
   
-  ## split output
-  out <- list(params = NULL, predict = NULL)
-  mfit <- as.matrix(jags.out, chains = TRUE)
-  pred.cols <- grep("x[", colnames(mfit), fixed = TRUE)
-  chain.col <- which(colnames(mfit) == "CHAIN")
-  out$predict <- ecoforecastR::mat2mcmc.list(mfit[, c(chain.col, pred.cols)])
-  out$params <- ecoforecastR::mat2mcmc.list(mfit[, -pred.cols])
-  out <- list(out = out, jags.model = j.model)
+  # calculate some inits from ch
+  n.alive <- length(ch[ch %in% c(alive.a, alive.p, alive.u)]) # total captured alive
+  n.captured <- length(ch[ch != unobserved]) # total captured
   
-  iter <- paste0(site, "_", chain, "_", i, ".RData")
+  p.a.init <- length(ch[ch == alive.a]) / n.captured # proportion captured without ticks
+  p.p.init <- length(ch[ch == alive.p]) / n.captured # proportion captured with ticks
+  p.d.init <- length(ch[ch == dead]) / n.captured # proportion captured dead
+  p.u.init <- length(ch[ch == alive.u]) / n.alive # proportion captured without ticks
   
-  save(out, 
-       monitor,
-       file = file.path(site.dir, iter))
+  
+  inits <- function(){list(
+    # x = x_inits(x.known, f),
+    phi.a = runif(1, 0.98, 1),            
+    phi.p = runif(1, 0.98, 1),            
+    psi.ap = runif(1, 0.4, 0.6),       
+    psi.pa = runif(1, 0.4, 0.6),       
+    p.a = runif(1, 0.4, 0.6),
+    p.p = runif(1, 0.4, 0.6),
+    p.d = runif(1, 0.4, 0.6), 
+    p.u = runif(1, 0.4, 0.6)
+  )}
   
 }
+
+# inits for parameters
+
+message(paste0("Capture history matrix has ", nrow(ch), " rows and ", ncol(ch), " columns"))
+# message(paste0("Compiling JAGS with ", n.adapt, " adaptive iterations..."))
+
+if(n.slots > 1){
+  source("Functions/run_nimble_parallel2.R")
+  cl <- makeCluster(n.slots)
+  samples <- run_nimble_parallel(
+    cl = cl,
+    model = model.code,
+    constants = constants,
+    data = data,
+    inits = inits,
+    monitor = monitor,
+    n.iter = n.iter,
+    n.burnin = n.burnin,
+    n.ens = 10000,
+    thin = thin,
+    check.interval = 5,
+    max.iter = max.iter,
+    save.states = TRUE,
+    file.name = file.path(site.dir, "NIMBLE_check.RData")
+  )
+  stopCluster(cl)
+  
+  
+  message("Writing output...")
+  save(samples,
+       file = file.path(site.dir, "NIMBLE_samples.RData"))  
+  message("--- Done ---")
+} else {
+  source("R/2.2_multiStateDailySurvivalTransitionNimble.R")
+  modelBlock <- nimbleModel(model.code,
+                            constants = constants,
+                            data = data,
+                            inits = inits())
+  modelBlock$initializeInfo()
+  # 
+  # model <- modelBlock$newModel()
+  # 
+  cModelBlock <- compileNimble(modelBlock)
+  # cModel <- compileNimble(model)
+  # 
+  # 
+  mcmcConfBlock <- configureMCMC(cModelBlock,
+                                 monitors = monitor,
+                                 thin = thin)
+  # mcmcConf <- configureMCMC(cModel,
+  #                           monitors = monitor,
+  #                           thin = thin)
+  # 
+  # mcmcConfBlock$removeSampler(c("phi.a", "phi.p"))
+  # mcmcConfBlock$addSampler(target = c("phi.a", "phi.p"), type = "RW_block")
+  # 
+  # mcmcConfBlock$removeSampler(c("psi.ap", "psi.pa"))
+  # mcmcConfBlock$addSampler(target = c("psi.ap", "psi.pa"), type = "RW_block")
+  # 
+  # mcmcConfBlock$removeSampler(c("p.a", "p.p", "p.d", "p.u"))
+  # mcmcConfBlock$addSampler(target = c("p.a", "p.p", "p.d", "p.u"), type = "RW_block")
+  # 
+  # 
+  # mcmcConfBlock$printSamplers(monitor)
+  # 
+  # mcmcBuild <- buildMCMC(mcmcConf)
+  mcmcBuildBlock <- buildMCMC(mcmcConfBlock)
+  # 
+  # compMCMC <- compileNimble(mcmcBuild)
+  compMCMCBlock <- compileNimble(mcmcBuildBlock)
+  # 
+  # compMCMC$run(niter = n.iter, reset = FALSE)
+  compMCMCBlock$run(niter = n.iter, reset = FALSE)
+  # 
+  # library(coda)
+  # message("Effective Size all RW:")
+  # efs <- effectiveSize(as.matrix(compMCMC$mvSamples))
+  # print(efs)
+  # 
+  message("Effective Size with Block:")
+  efs <- effectiveSize(as.matrix(compMCMCBlock$mvSamples))
+  print(efs)
+  # 
+  # message("Acceptance Rate all RW:")
+  # a.rate <- 1 - rejectionRate(as.mcmc(as.matrix(compMCMC$mvSamples)))
+  # print(a.rate)
+  # 
+  message("Acceptance Rate with Block:")
+  a.rate <- 1 - rejectionRate(as.mcmc(as.matrix(compMCMCBlock$mvSamples)))
+  print(a.rate)
+}
+
 
 
 
