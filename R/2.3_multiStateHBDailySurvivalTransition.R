@@ -95,8 +95,8 @@ model.code <- nimbleCode({
     po[3,1,s] <- 0
     po[3,2,s] <- 0
     po[3,3,s] <- 0
-    po[3,4,s] <- p.d.rate[s]
-    po[3,5,s] <- 1 - p.d.rate[s]
+    po[3,4,s] <- 1
+    po[3,5,s] <- 0
     po[4,1,s] <- 0
     po[4,2,s] <- 0
     po[4,3,s] <- 0
@@ -114,12 +114,12 @@ model.code <- nimbleCode({
       # transition matrix - probabilities of state S(t+1) given S(t)
       ps[1,1,s,t] <- Sp[s,t] * (1 - Fpa[s,t])
       ps[1,2,s,t] <- Sp[s,t] * Fpa[s,t]
-      ps[1,3,s,t] <- (1 - Sp[s,t])
-      ps[1,4,s,t] <- 0
+      ps[1,3,s,t] <- (1 - Sp[s,t]) * p.d.rate[s]
+      ps[1,4,s,t] <- (1 - Sp[s,t]) * (1 - p.d.rate[s])
       ps[2,1,s,t] <- Sa[s,t] * Fap[s,t]
       ps[2,2,s,t] <- Sa[s,t] * (1 - Fap[s,t])
-      ps[2,3,s,t] <- (1 - Sa[s,t])
-      ps[2,4,s,t] <- 0
+      ps[2,3,s,t] <- (1 - Sa[s,t]) * p.d.rate[s]
+      ps[2,4,s,t] <- (1 - Sa[s,t]) * (1 - p.d.rate[s])
       ps[3,1,s,t] <- 0
       ps[3,2,s,t] <- 0
       ps[3,3,s,t] <- 0
