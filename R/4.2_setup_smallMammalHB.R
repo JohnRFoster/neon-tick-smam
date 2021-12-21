@@ -155,8 +155,8 @@ if(any(f+1 == ncol(ch))){
 }
 
 # get the last occasion for each site
-get.last <- function(x) max(which(x != 0))
-l <- apply(trap.occasions, 1, get.last)
+get.last <- function(x) max(which(x != unobserved))
+l <- apply(ch, 1, get.last)
 
 source("Functions/known_state_ms.R")
 x.known <- known_state_ms(ch, f, unobserved, alive.u, dead)
