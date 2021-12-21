@@ -18,7 +18,7 @@ run.intake <- FALSE
 check.neon <- FALSE
 
 out.dir <- "/projectnb/dietzelab/fosterj/FinalOut/neon-tick-smam/mice"
-model.dir <- "multiStateDailySurvivalTransition"
+model.dir <- "multiStateDailySurvivalTransitionHB"
 
 
 # sites to run
