@@ -48,11 +48,11 @@ tick_data <- function(site){
   n.species <- length(species) 
   
   # make the array of tick densities by plot and species
-  Y <- array(NA, dim = c(3, # life stage
+  Y <- array(NA, dim = c(4, # life stage
                          max(occasions.plot$n.occasions), # number of drag occasions
                          n.plots, # number of plots
                          n.species)) # number of species
-  
+  Y.init <- Y
   # matrix of drag occasion dates for each plot
   plot.dates <- matrix(NA, n.plots, max(occasions.plot$n.occasions))
   diff.time <- matrix(NA, n.plots, max(occasions.plot$n.occasions)-1)
@@ -67,8 +67,14 @@ tick_data <- function(site){
                scientificName == species[spp])
       n.days <- nrow(tick.plot)
       Y[1, 1:n.days, p, spp] <- pull(tick.plot, Larva)
-      Y[2, 1:n.days, p, spp] <- pull(tick.plot, Nymph)
-      Y[3, 1:n.days, p, spp] <- pull(tick.plot, Adult)
+      Y[3, 1:n.days, p, spp] <- pull(tick.plot, Nymph)
+      Y[4, 1:n.days, p, spp] <- pull(tick.plot, Adult)
+      Y.init[1, 1:n.days, p, spp] <- Y[1, 1:n.days, p, spp]
+      Y.init[3, 1:n.days, p, spp] <- Y[3, 1:n.days, p, spp]
+      Y.init[4, 1:n.days, p, spp] <- Y[4, 1:n.days, p, spp]
+      for(t in 1:n.days){
+        Y.init[2, t, p, spp] <- mean(c(Y[1, t, p, spp], Y[3, t, p, spp])  )
+      }
       
       drags <- pull(tick.plot, time)
       plot.dates[p, 1:n.days] <- as.character(drags)
@@ -78,29 +84,38 @@ tick_data <- function(site){
       
     }  
   }
-
+  
+  
+  
   seq.days <- array(NA, dim = c(n.plots, max(occasions.plot$n.occasions)-1, max(diff.time, na.rm = TRUE)))
+  p.index <- matrix(NA, n.plots, max(occasions.plot$n.occasions)-1)
   for(p in seq_len(n.plots)){
-    dt.index <- c(1, cumsum(diff.time[p,]))
+    dt.index <- c(1,cumsum(diff.time[p,]))
     dt.index <- dt.index[!is.na(dt.index)]
     n.days <- length(which(!is.na(diff.time[p,])))
     max.interval <- max(diff.time[p,], na.rm = TRUE)
     for (i in 1:n.days) {
       xx <- (dt.index[i+1]-1):dt.index[i]
       seq.days[p, i, 1:length(xx)] <- xx
+      p.index[p,i] <- min(xx)
     }
   }
   
-  return(list(y = Y,
-              plots = plots,
-              n.plots = n.plots,
-              species = species,
-              n.species = n.species,
-              plot.dates = plot.dates,
-              diff.time = diff.time,
-              n.occ.plot = pull(occasions.plot, n.occasions),
-              N = max(N),
-              seq.days = seq.days,
-              occasions.plot = occasions.plot,
-              nlcd = nlcd))
+  data <- list(y = Y)
+  constants <- list(plots = plots,
+                    n.plots = n.plots,
+                    species = species,
+                    n.species = n.species,
+                    plot.dates = plot.dates,
+                    diff.time = diff.time,
+                    n.occ.plot = pull(occasions.plot, n.occasions),
+                    N = N,
+                    p.index = p.index,
+                    seq.days = seq.days,
+                    # occasions.plot = occasions.plot,
+                    nlcd = nlcd,
+                    Y.init = Y.init)
+  
+  return(list(data = data,
+              constants = constants))
 }
