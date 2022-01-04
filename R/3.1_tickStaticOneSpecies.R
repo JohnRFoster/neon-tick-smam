@@ -1,6 +1,6 @@
 # basic tick population model - stage structured matrix model
 # all demographic parameters are constant and estimated daily
-# process error is estimated via MVN with precisions on the diagonal
+# process error is estimated via MVN with SDs on the diagonal
 
 
 
@@ -16,31 +16,34 @@ model.code <- nimbleCode({
   theta.ln ~ dnorm(0, tau = tau.dem)            # larvae -> dormant nymph daily transition 
   theta.na ~ dnorm(0, tau = tau.dem)                 # larvae -> questing nymph daily transition 
   repro.mu ~ T(dnorm(30, tau = 0.01), 0, Inf)     # reproduction
-  tau.l ~ dgamma(1.0E-3, 1.0E-3)
-  tau.d ~ dgamma(1.0E-3, 1.0E-3)
-  tau.n ~ dgamma(1.0E-3, 1.0E-3)
-  tau.a ~ dgamma(1.0E-3, 1.0E-3)
-  tau.obs.l ~ dgamma(1.0E-3, 1.0E-3)
-  tau.obs.n ~ dgamma(1.0E-3, 1.0E-3)
-  tau.obs.a ~ dgamma(1.0E-3, 1.0E-3)
+
+  for(i in 1:ns){
+    sig[i] ~ dinvgamma(0.001, 0.001)  
+  }
+  for(q in 1:3){
+    tau.obs[q] ~ dinvgamma(0.001, 0.001)  
+  }
   
   ### precision priors
-  OMEGA[1,1] <- tau.l
+  OMEGA[1,1] <- sig[1]
   OMEGA[1,2] <- 0
   OMEGA[1,3] <- 0
   OMEGA[1,4] <- 0
   OMEGA[2,1] <- 0
-  OMEGA[2,2] <- tau.d
+  OMEGA[2,2] <- sig[2]
   OMEGA[2,3] <- 0
   OMEGA[2,4] <- 0
   OMEGA[3,1] <- 0
   OMEGA[3,2] <- 0
-  OMEGA[3,3] <- tau.n
+  OMEGA[3,3] <- sig[3]
   OMEGA[3,4] <- 0
   OMEGA[4,1] <- 0
   OMEGA[4,2] <- 0
   OMEGA[4,3] <- 0
-  OMEGA[4,4] <- tau.a
+  OMEGA[4,4] <- sig[4]
+  
+  # Cholesky decomposition
+  Ochol[1:ns,1:ns] <- chol(OMEGA[1:ns,1:ns])
   
   ### first latent process 
   for(p in 1:n.plots){
@@ -57,13 +60,17 @@ model.code <- nimbleCode({
   logit(phi.n) <- phi.n.mu
   logit(phi.a) <- phi.a.mu
   
+  for(t in 1:N){
+    gdd[t] ~ T(dnorm(gdd.mu[t], tau = gdd.tau[t]), 0, gdd.max)  
+  }
+  
   ### define parameters
   for(p in 1:n.plots){
-    for(t in 1:N[p]){   # loop over every day in time series
+    for(t in 1:N){   # loop over every day in time series
       
-      theta.n2a[t,p] <- if_else_nimble((gdd[t] <= 1000) || (gdd[t] >= 2500),n2a,0)
-      lambda[t,p] <- if_else_nimble((gdd[t] >= 1400) && (gdd[t] <= 2500),repro.mu,0)
-      l2n.quest[t,p] <- if_else_nimble((gdd[t] >= 400) && (gdd[t] <= 2500),1,0)
+      theta.n2a[t,p] <- if_else_nimble((gdd[t] <= 1000) | (gdd[t] >= 2500),n2a,0)
+      lambda[t,p] <- if_else_nimble((gdd[t] >= 1400) & (gdd[t] <= 2500),repro.mu,0)
+      l2n.quest[t,p] <- if_else_nimble((gdd[t] >= 400) & (gdd[t] <= 2500),1,0)
       
       A[1,1,t,p] <- phi.l * (1 - l2n)
       A[1,2,t,p] <- 0
@@ -100,7 +107,7 @@ model.code <- nimbleCode({
       Ex[1:ns,t,p] <- P[1:ns,1:ns,p.index[p,t],p] %*% x[1:ns,t,p] 
       
       # process error
-      px[1:ns,t,p] ~ dmnorm(mean = Ex[1:ns,t,p], prec = OMEGA[1:ns,1:ns])
+      px[1:ns,t,p] ~ dmnorm(mean = Ex[1:ns,t,p], cholesky = Ochol[1:ns,1:ns], prec_param = 0)
       
       x[1,t+1,p] <- px[1,t,p]
       x[2,t+1,p] <- max(px[2,t,p], 0)
@@ -113,9 +120,9 @@ model.code <- nimbleCode({
     for(d in 1:n.occ.plot[p]){
       
       ## fit the blended model to observed data 
-      y[1,d,p] ~ T(dnorm(x[1,d,p], tau = tau.obs.l), 0, Inf)
-      y[3,d,p] ~ T(dnorm(x[3,d,p], tau = tau.obs.n), 0, Inf)
-      y[4,d,p] ~ T(dnorm(x[4,d,p], tau = tau.obs.a), 0, Inf)
+      y[1,d,p] ~ T(dnorm(x[1,d,p], tau = tau.obs[1]), 0, Inf)
+      y[3,d,p] ~ T(dnorm(x[3,d,p], tau = tau.obs[2]), 0, Inf)
+      y[4,d,p] ~ T(dnorm(x[4,d,p], tau = tau.obs[3]), 0, Inf)
       
     } # t
   }
@@ -132,10 +139,5 @@ monitor <- c("x",
              "theta.ln",
              "theta.na",
              "repro.mu",
-             "tau.l",
-             "tau.d",
-             "tau.n",
-             "tau.a",
-             "tau.obs.l",
-             "tau.obs.n",
-             "tau.obs.a")
+             "sig",
+             "tau.obs")
