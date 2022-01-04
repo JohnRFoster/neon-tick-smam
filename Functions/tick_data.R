@@ -3,7 +3,9 @@ library(tidyverse)
 tick_data <- function(site){
   data <- read_csv("Data/tickTargets.csv")
   data <- data %>% 
-    filter(siteID == site) %>% 
+    filter(siteID == site,
+           time >= "2016-01-01",
+           time <= "2020-12-31") %>% 
     select(-siteID, -totalCount)
   
   aa.sites <- c("UKFS", "TALL", "OSBS", "KONZ")
@@ -53,12 +55,13 @@ tick_data <- function(site){
                          n.plots, # number of plots
                          n.species)) # number of species
   Y.init <- Y
+  
   # matrix of drag occasion dates for each plot
   plot.dates <- matrix(NA, n.plots, max(occasions.plot$n.occasions))
   diff.time <- matrix(NA, n.plots, max(occasions.plot$n.occasions)-1)
   
   # nlcd class and total number of days for each plot
-  nlcd <- N <- rep(NA, n.plots)
+  nlcd <- N <- start.date <- end.date <- rep(NA, n.plots)
   
   for(spp in 1:n.species){
     for(p in seq_len(n.plots)){
@@ -76,22 +79,29 @@ tick_data <- function(site){
         Y.init[2, t, p, spp] <- mean(c(Y[1, t, p, spp], Y[3, t, p, spp])  )
       }
       
-      drags <- pull(tick.plot, time)
-      plot.dates[p, 1:n.days] <- as.character(drags)
-      diff.time[p, 1:(n.days-1)] <- diff.Date(drags) %>% as.numeric()
-      N[p] <- sum(diff.Date(drags)) %>% as.numeric()
-      nlcd[p] <- tick.plot$nlcdClass[1]
+      drags <- pull(tick.plot, time) # when drags occurred
+      start.date[p] <- first(drags) %>% as.character() # first drag
+      end.date[p] <- last(drags) %>% as.character() # last drag
+      plot.dates[p, 1:n.days] <- as.character(drags) # matrix of all drag days for each plot
+      diff.time[p, 1:(n.days-1)] <- diff.Date(drags) %>% as.numeric() # number of days between drag events
+      N[p] <- as.numeric(ymd(end.date[p]) - ymd(start.date[p]) + 1) # total number of days in time series
+      nlcd[p] <- tick.plot$nlcdClass[1] # nlcd class for each plot
       
     }  
   }
   
-  
+  first.day <- min(ymd(start.date)) # first day at site level
+  last.day <- max(ymd(end.date)) # last day at site level
+  all.days <- seq.Date(first.day, last.day, by = 1) # sequence of all days in timeseries at site level
+  plot.start <- match(ymd(start.date), all.days) # first day of each plot w.r.t. all.days
+  plot.end <- match(ymd(end.date), all.days) # last day of each plot w.r.t. all.days
   
   seq.days <- array(NA, dim = c(n.plots, max(occasions.plot$n.occasions)-1, max(diff.time, na.rm = TRUE)))
   p.index <- matrix(NA, n.plots, max(occasions.plot$n.occasions)-1)
   for(p in seq_len(n.plots)){
-    dt.index <- c(1,cumsum(diff.time[p,]))
-    dt.index <- dt.index[!is.na(dt.index)]
+    dt.index <- c(1, cumsum(diff.time[p,]))
+    dt.index <- dt.index[!is.na(dt.index)] # days index
+    dt.index <- dt.index + plot.start[p] - 1 # match to site level sequence
     n.days <- length(which(!is.na(diff.time[p,])))
     max.interval <- max(diff.time[p,], na.rm = TRUE)
     for (i in 1:n.days) {
@@ -108,8 +118,11 @@ tick_data <- function(site){
                     n.species = n.species,
                     plot.dates = plot.dates,
                     diff.time = diff.time,
+                    all.days = all.days,
+                    plot.start = plot.start,
+                    plot.end = plot.end,
                     n.occ.plot = pull(occasions.plot, n.occasions),
-                    N = N,
+                    N = max(N),
                     p.index = p.index,
                     seq.days = seq.days,
                     # occasions.plot = occasions.plot,
