@@ -8,12 +8,13 @@
 
 
 library(tidyverse)
-library(neonstore)
 library(lubridate)
 library(uuid)
 
 # NEONSTORE_HOME, NEONSTORE_DB, and NEON_TOKEN defined in .Renviron
-
+Sys.setenv(NEONSTORE_DB = "/projectnb/dietzelab/fosterj/Data/neonstoreDB")
+Sys.setenv(NEONSTORE_HOME = "/projectnb/dietzelab/fosterj/Data/neonstoreDB")
+library(neonstore)
 
 mouse_intake <- function(check.neon){
   
@@ -137,4 +138,4 @@ mouse_intake <- function(check.neon){
   write_csv(smam.data, "Data/allSmallMammals.csv")
 }
 
-
+mouse_intake(TRUE)

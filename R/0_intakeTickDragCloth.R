@@ -4,16 +4,17 @@
 
 
 library(tidyverse)
-library(neonstore)
 library(lubridate)
 library(uuid)
 
 # NEONSTORE_HOME, NEONSTORE_DB, and NEON_TOKEN defined in .Renviron
-
+Sys.setenv(NEONSTORE_DB = "/projectnb/dietzelab/fosterj/Data/neonstoreDB")
+Sys.setenv(NEONSTORE_HOME = "/projectnb/dietzelab/fosterj/Data/neonstoreDB")
+library(neonstore)
 
 #### Last check 2021-12-02
-# product <- "DP1.10093.001"
-# neon_download(product = product)
+product <- "DP1.10093.001"
+neon_download(product = product)
 
 tick.field.raw <- neon_read("tck_fielddata") 
 tick.taxon.raw <- neon_read("tck_taxonomyProcessed")
