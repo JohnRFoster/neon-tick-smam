@@ -4,13 +4,17 @@ tick_data <- function(site){
   data <- read_csv("Data/tickTargets.csv")
   data <- data %>% 
     filter(siteID == site,
-           time >= "2016-01-01",
            time <= "2020-12-31") %>% 
     select(-siteID, -totalCount)
   
   aa.sites <- c("UKFS", "TALL", "OSBS", "KONZ")
   ix.sites <- c("TREE", "HARV")
   both.sites <- c("SERC", "SCBI", "ORNL", "LENO", "BLAN")
+  
+  if(site == "ORNL"){
+    data <- data %>% 
+      filter(plotID != "ORNL_006")
+  }
   
   if(site %in% both.sites){
     data.aa <- data %>% 
@@ -68,6 +72,7 @@ tick_data <- function(site){
       tick.plot <- df %>% 
         filter(plotID == plots[p],
                scientificName == species[spp])
+      
       n.days <- nrow(tick.plot)
       Y[1, 1:n.days, p, spp] <- pull(tick.plot, Larva)
       Y[3, 1:n.days, p, spp] <- pull(tick.plot, Nymph)
@@ -93,13 +98,14 @@ tick_data <- function(site){
   first.day <- min(ymd(start.date)) # first day at site level
   last.day <- max(ymd(end.date)) # last day at site level
   all.days <- seq.Date(first.day, last.day, by = 1) # sequence of all days in timeseries at site level
+  # all.days <- all.days[-which(all.days == "2016-12-31")]
   plot.start <- match(ymd(start.date), all.days) # first day of each plot w.r.t. all.days
   plot.end <- match(ymd(end.date), all.days) # last day of each plot w.r.t. all.days
   
-  seq.days <- array(NA, dim = c(n.plots, max(occasions.plot$n.occasions)-1, max(diff.time, na.rm = TRUE)))
+  seq.days <- array(NA, dim = c(n.plots, max(occasions.plot$n.occasions)-1, max(diff.time, na.rm = TRUE)+1))
   p.index <- matrix(NA, n.plots, max(occasions.plot$n.occasions)-1)
   for(p in seq_len(n.plots)){
-    dt.index <- c(1, cumsum(diff.time[p,]))
+    dt.index <- cumsum(c(1, diff.time[p,]))
     dt.index <- dt.index[!is.na(dt.index)] # days index
     dt.index <- dt.index + plot.start[p] - 1 # match to site level sequence
     n.days <- length(which(!is.na(diff.time[p,])))
@@ -122,7 +128,7 @@ tick_data <- function(site){
                     plot.start = plot.start,
                     plot.end = plot.end,
                     n.occ.plot = pull(occasions.plot, n.occasions),
-                    N = max(N),
+                    N = max(N) - 1,
                     p.index = p.index,
                     seq.days = seq.days,
                     # occasions.plot = occasions.plot,

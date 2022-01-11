@@ -1,8 +1,8 @@
 library(tidyverse)
 library(lubridate)
 
-site <- "UKFS"
-
+site <- "TREE"
+spp <- "Ixodes scapularis"
 source("Functions/tick_data.R")
 tick.ls <- tick_data(site)
 data <- tick.ls$data
@@ -14,38 +14,42 @@ if(constants$n.species == 1){
 } else {
   Y.init <- constants$Y.init
 }
-## TO-DO
-# add missing dates into met data to get NA cumulative gdd values
-# index met with tick observations
 
-# need dates starting with Jan. 1 of the first year through last observation date
-days.year <- seq.Date(ymd(paste0(min(year(constants$all.days)), "-01-01")), 
-                      max(constants$all.days),
-                      by = 1)
+# Y.init[2,,] <- Y.init[2,,] + 500
+Y.init <- Y.init + 10
 
-days.df <- tibble(Date = days.year)
-daily.air.temp <- read_csv("Data/airTempDaily.csv")
-daily.air.temp <- daily.air.temp %>% filter(siteID == site)
+# get cumGDD
+source("Functions/daymet_functions.R")
+cumgdd <- daymet_cumGDD(site, "tick")
+all.cumGDD <- tibble()
+for(p in 1:constants$n.plots){
+  plot.cumGDD.p <- cumgdd %>% 
+    ungroup() %>% 
+    filter(plotID == constants$plots[p],
+           Date %in% constants$all.days) %>%
+    select(-year) %>% 
+    pivot_wider(names_from = "Date",
+                values_from = "cumGDD")
+  
+  all.cumGDD <- bind_rows(all.cumGDD, plot.cumGDD.p)
+}
 
-met.df <- left_join(days.df, daily.air.temp, by = "Date")
+data$cumGDD.mu <- all.cumGDD %>% 
+  select(-plotID) %>% 
+  as.matrix()
 
-met.df <- met.df %>% 
-  arrange(Date) %>% 
-  group_by(Year) %>%
-  mutate(growingDegree = if_else(tempTripleMaximum > 0, tempTripleMaximum, 0),
-         cumGDD = cumsum(growingDegree)) %>% 
-  filter(Date %in% constants$all.days)
+# transition thresholds
+trans.cgdd <- read_csv("Data/cumgddThresholds.csv") 
+trans.cgdd <- trans.cgdd %>% 
+  filter(siteID == site,
+         scientificName == spp) 
+data$rho.l1 <- trans.cgdd %>% filter(lifeStage == "Larva") %>% pull(start)
+data$rho.l2 <- trans.cgdd %>% filter(lifeStage == "Larva") %>% pull(end)
+data$rho.n1 <- trans.cgdd %>% filter(lifeStage == "Nymph") %>% pull(start)
+data$rho.n2 <- trans.cgdd %>% filter(lifeStage == "Nymph") %>% pull(end)
+data$rho.a1 <- trans.cgdd %>% filter(lifeStage == "Adult") %>% pull(start)
+data$rho.a2 <- trans.cgdd %>% filter(lifeStage == "Adult") %>% pull(end)
 
-
-cumGDD <- pull(met.df, cumGDD)
-cumGDD.var <- pull(met.df, airTempMaximumVariance)
-data$gdd.mu <- cumGDD
-data$gdd.mu[is.na(cumGDD)] <- approx(1:length(cumGDD), cumGDD, xout = which(is.na(cumGDD)))$y
-
-data$gdd.tau <- 1 / cumGDD.var
-data$gdd.tau[is.na(cumGDD.var)] <- mean(data$gdd.tau, na.rm = TRUE)
-
-constants$gdd.max <- max(cumGDD, na.rm = T) + 10
 constants$tau.dem <- 0.04
 constants$ns <- 4
 
@@ -53,19 +57,21 @@ data$x.init <- rep(10, 4)
 
 inits <- function() {
   list(
-    px = 0.1 + abs(jitter(Y.init[, -1, ])),
-    x = 1 + abs(jitter(Y.init)),
-    gdd = abs(jitter(data$gdd.mu)),
-    repro.mu = jitter(20),
+    px = abs(jitter(Y.init[, -1, ])),
+    x = abs(jitter(Y.init)),
+    cumgdd = abs(jitter(data$cumGDD.mu)),
+    repro.mu = jitter(50),
     phi.l.mu = jitter(3),
     phi.n.mu = jitter(4),
     phi.a.mu = jitter(5),
-    theta.ln = jitter(0),
-    theta.na = jitter(0),
+    theta.ln = jitter(-6),
+    theta.na = jitter(-6),
     tau.obs = abs(rnorm(3, 10, 5)),
-    sig = abs(rnorm(4, 0, 10))
+    tau.gdd = abs(rnorm(1, 5, 2)),
+    sig = abs(rnorm(4, c(1e+5, 1000, 1, 20), 3))
   )
 }
+itest <- inits()
 
 message("Build model")
 source("R/3.1_tickStaticOneSpecies.R")
@@ -78,9 +84,17 @@ model$initializeInfo()
 cModel <- compileNimble(model)
 monitor.check <- monitor[monitor != "x"]
 mcmcConf <- configureMCMC(cModel, monitors = monitor.check)
+
+# mcmcConf$removeSampler(target = "phi.a.mu")
+# mcmcConf$addSampler(target = "phi.a.mu", type = "slice")
+# mcmcConf$removeSampler(target = "phi.l.mu")
+# mcmcConf$addSampler(target = "phi.l.mu", type = "slice")
+# mcmcConf$removeSampler(target = "phi.n.mu")
+# mcmcConf$addSampler(target = "phi.n.mu", type = "slice")
+
 mcmcBuild <- buildMCMC(mcmcConf)
 compMCMC <- compileNimble(mcmcBuild)
-compMCMC$run(niter = 1000)
+compMCMC$run(niter = 2500)
 
 library(coda)
 
@@ -89,47 +103,7 @@ mcmc.eff <- tibble(
   effSize_default = effectiveSize(as.matrix(compMCMC$mvSamples)) %>% round(2),
   accRate_default = 1 - rejectionRate(as.mcmc(as.matrix(compMCMC$mvSamples)) %>% round(2))
 )
+
 print(as.matrix(mcmc.eff))
+print(head(as.matrix(compMCMC$mvSamples)))
 
-
-
-
-
-
-
-
-# 
-# 
-# 
-# 
-# 
-# n.days <- df$time %>% unique() %>% length()
-# n.days == nrow(df)
-# 
-# 
-# 
-# 
-# 
-# 
-# #### maybe just use plots as an effect and track a vector of nlcdclass types?
-# 
-# sites <- target$siteID %>% unique()
-# 
-# for(i in seq_along(sites)){
-#   gg <- target %>% 
-#     filter(siteID == sites[i]) %>% 
-#     mutate(standardCount = standardCount + 1) %>% 
-#     ggplot() +
-#     aes(x = time, y = standardCount) +
-#     geom_point(aes(color = scientificName, shape = plotID)) +
-#     scale_y_log10() +
-#     facet_grid(rows = vars(lifeStage),
-#                cols = vars(nlcdClass)) +
-#     labs(title = sites[i]) +
-#     theme_bw() +
-#     theme(axis.text = element_text(size = 18),
-#           title = element_text(size = 20),
-#           axis.title.x = element_blank(),
-#           axis.title.y = element_text(size = 16))
-#   print(gg)
-# }

@@ -16,7 +16,8 @@ model.code <- nimbleCode({
   theta.ln ~ dnorm(0, tau = tau.dem)            # larvae -> dormant nymph daily transition 
   theta.na ~ dnorm(0, tau = tau.dem)                 # larvae -> questing nymph daily transition 
   repro.mu ~ T(dnorm(30, tau = 0.01), 0, Inf)     # reproduction
-
+  tau.gdd ~ dinvgamma(0.001, 0.001)
+  
   for(i in 1:ns){
     sig[i] ~ dinvgamma(0.001, 0.001)  
   }
@@ -47,10 +48,10 @@ model.code <- nimbleCode({
   
   ### first latent process 
   for(p in 1:n.plots){
-    x[1, 1, p] ~ T(dnorm(x.init[1], sd = 5), 0, Inf)
-    x[2, 1, p] ~ T(dnorm(x.init[2], sd = 5), 0, Inf)
-    x[3, 1, p] ~ T(dnorm(x.init[3], sd = 5), 0, Inf)
-    x[4, 1, p] ~ T(dnorm(x.init[4], sd = 5), 0, Inf)
+    x[1, 1, p] ~ dnorm(x.init[1], sd = 5)
+    x[2, 1, p] ~ dnorm(x.init[2], sd = 5)
+    x[3, 1, p] ~ dnorm(x.init[3], sd = 5)
+    x[4, 1, p] ~ dnorm(x.init[4], sd = 5)
   }
   
   # convert linear to logit (daily rates)
@@ -60,17 +61,16 @@ model.code <- nimbleCode({
   logit(phi.n) <- phi.n.mu
   logit(phi.a) <- phi.a.mu
   
-  for(t in 1:N){
-    gdd[t] ~ T(dnorm(gdd.mu[t], tau = gdd.tau[t]), 0, gdd.max)  
-  }
-  
+
   ### define parameters
   for(p in 1:n.plots){
     for(t in 1:N){   # loop over every day in time series
       
-      theta.n2a[t,p] <- if_else_nimble((gdd[t] <= 1000) | (gdd[t] >= 2500),n2a,0)
-      lambda[t,p] <- if_else_nimble((gdd[t] >= 1400) & (gdd[t] <= 2500),repro.mu,0)
-      l2n.quest[t,p] <- if_else_nimble((gdd[t] >= 400) & (gdd[t] <= 2500),1,0)
+      cumgdd[p,t] ~ T(dnorm(cumGDD.mu[p,t], tau = tau.gdd), 0, Inf)  
+      
+      theta.n2a[t,p] <- if_else_nimble((cumgdd[p,t] <= rho.a2) | (cumgdd[p,t] >= rho.a1),n2a,0)
+      lambda[t,p] <- if_else_nimble((cumgdd[p,t] >= rho.l1) & (cumgdd[p,t] <= rho.l2),repro.mu,0)
+      l2n.quest[t,p] <- if_else_nimble((cumgdd[p,t] >= rho.n1) & (cumgdd[p,t] <= rho.n2),1,0)
       
       A[1,1,t,p] <- phi.l * (1 - l2n)
       A[1,2,t,p] <- 0
@@ -98,7 +98,7 @@ model.code <- nimbleCode({
       
       P[1:ns,1:ns,seq.days[p,t,1],p] <- A[1:ns,1:ns,seq.days[p,t,1],p]
       
-      for(day in 2:(diff.time[p,t]-1)){
+      for(day in 2:(diff.time[p,t])){
         P[1:ns,1:ns,seq.days[p,t,day],p] <- P[1:ns,1:ns,seq.days[p,t,day]+1,p] %*% 
           A[1:ns,1:ns,seq.days[p,t,day],p]
       }
@@ -120,9 +120,9 @@ model.code <- nimbleCode({
     for(d in 1:n.occ.plot[p]){
       
       ## fit the blended model to observed data 
-      y[1,d,p] ~ T(dnorm(x[1,d,p], tau = tau.obs[1]), 0, Inf)
-      y[3,d,p] ~ T(dnorm(x[3,d,p], tau = tau.obs[2]), 0, Inf)
-      y[4,d,p] ~ T(dnorm(x[4,d,p], tau = tau.obs[3]), 0, Inf)
+      y[1,d,p] ~ dnorm(x[1,d,p], tau = tau.obs[1])
+      y[3,d,p] ~ dnorm(x[3,d,p], tau = tau.obs[2])
+      y[4,d,p] ~ dnorm(x[4,d,p], tau = tau.obs[3])
       
     } # t
   }
@@ -140,4 +140,5 @@ monitor <- c("x",
              "theta.na",
              "repro.mu",
              "sig",
-             "tau.obs")
+             "tau.obs",
+             "tau.gdd")
