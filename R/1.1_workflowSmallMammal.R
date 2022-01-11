@@ -14,6 +14,7 @@ library(nimbleEcology)
 n.slots <- 4
 production <- TRUE
 HB <- TRUE
+weather <- TRUE
 run.intake <- FALSE
 check.neon <- FALSE
 
