@@ -7,9 +7,6 @@ library(parallel)
 library(nimble)
 library(nimbleEcology)
 
-
-
-
 # script flow
 n.slots <- 4
 production <- TRUE
@@ -19,7 +16,7 @@ run.intake <- FALSE
 check.neon <- FALSE
 
 out.dir <- "/projectnb/dietzelab/fosterj/FinalOut/neon-tick-smam/mice"
-model.dir <- "multiStateDailySurvivalTransitionHB"
+model.dir <- "multiStateHBAllSiteEffects"
 
 
 # sites to run
@@ -34,7 +31,7 @@ sites <- site.coord %>% pull(siteID)
 if(production) {
   n.burnin <- 0
   thin <- 1
-  n.iter <- 50000
+  n.iter <- if_else(HB, 1000, 50000)
   max.iter <- 7e6
   
 } else { # testing / dev
@@ -59,8 +56,6 @@ if(run.intake){
 if(HB){
   # load model
   source("R/2.3_multiStateHBDailySurvivalTransition.R")
-  
-  n.iter <- 1000
   site.dir <- file.path(out.dir, model.dir)
 } else {
   # load model
