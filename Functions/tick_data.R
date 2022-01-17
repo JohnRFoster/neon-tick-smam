@@ -1,11 +1,11 @@
 library(tidyverse)
 
-tick_data <- function(site){
+tick_data <- function(site, spp.model){
   data <- read_csv("Data/tickTargets.csv")
   data <- data %>% 
     filter(siteID == site,
            time <= "2020-12-31") %>% 
-    select(-siteID, -totalCount)
+    select(-siteID, -occasionID)
   
   aa.sites <- c("UKFS", "TALL", "OSBS", "KONZ")
   ix.sites <- c("TREE", "HARV")
@@ -34,9 +34,12 @@ tick_data <- function(site){
       mutate(scientificName = "Ixodes scapularis")
   }
   
+  spp.filter <- if_else(spp.model == "IX", "Ixodes scapularis", "Amblyomma americanum")
+  
   df <- data.spp %>% 
+    filter(scientificName == spp.filter) %>% 
     pivot_wider(names_from = lifeStage,
-                values_from = standardCount,
+                values_from = processedCount,
                 values_fn = {sum}) %>% 
     arrange(plotID, time)
   
@@ -61,7 +64,7 @@ tick_data <- function(site){
   Y.init <- Y
   
   # matrix of drag occasion dates for each plot
-  plot.dates <- matrix(NA, n.plots, max(occasions.plot$n.occasions))
+  plot.dates <- area.sampled <- matrix(NA, n.plots, max(occasions.plot$n.occasions))
   diff.time <- matrix(NA, n.plots, max(occasions.plot$n.occasions)-1)
   
   # nlcd class and total number of days for each plot
@@ -88,6 +91,7 @@ tick_data <- function(site){
       start.date[p] <- first(drags) %>% as.character() # first drag
       end.date[p] <- last(drags) %>% as.character() # last drag
       plot.dates[p, 1:n.days] <- as.character(drags) # matrix of all drag days for each plot
+      area.sampled[p, 1:n.days] <- pull(tick.plot, totalSampledArea) # matrix sampling effort
       diff.time[p, 1:(n.days-1)] <- diff.Date(drags) %>% as.numeric() # number of days between drag events
       N[p] <- as.numeric(ymd(end.date[p]) - ymd(start.date[p]) + 1) # total number of days in time series
       nlcd[p] <- tick.plot$nlcdClass[1] # nlcd class for each plot
@@ -117,7 +121,8 @@ tick_data <- function(site){
     }
   }
   
-  data <- list(y = Y)
+  data <- list(y = Y,
+               area.sampled = area.sampled)
   constants <- list(plots = plots,
                     n.plots = n.plots,
                     species = species,
