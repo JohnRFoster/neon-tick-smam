@@ -51,21 +51,31 @@ model.code <- nimbleCode({
   psi.ap ~ dnorm(0, tau = tau.param)   # transition from tick absent to tick present
   psi.pa ~ dnorm(0, tau = tau.param)   # transition from tick present to tick absent
   
+  p.a ~ dnorm(0, tau = tau.param)      # probability of observing a mouse with ticks absent
+  p.p ~ dnorm(0, tau = tau.param)      # probability of observing a mouse with ticks present
+  p.d ~ dnorm(0, tau = tau.param)      # probability of observing a dead mouse
+  p.u ~ dnorm(0, tau = tau.param)    # probability of marking an alive mouse as unknown tick status
+  
   tau.phi.p.site ~ dgamma(0.01, 0.01)
   tau.phi.a.site ~ dgamma(0.01, 0.01)
   tau.psi.pa.site ~ dgamma(0.01, 0.01)
   tau.psi.ap.site ~ dgamma(0.01, 0.01)
+  tau.p.a.site ~ dgamma(0.01, 0.01)
+  tau.p.p.site ~ dgamma(0.01, 0.01)
+  tau.p.d.site ~ dgamma(0.01, 0.01)
+  tau.p.u.site ~ dgamma(0.01, 0.01)
   
   for(s in 1:n.site){
     
-    p.a[s] ~ dnorm(0, tau = tau.param)      # probability of observing a mouse with ticks absent
-    p.p[s] ~ dnorm(0, tau = tau.param)      # probability of observing a mouse with ticks present
-    p.d[s] ~ dnorm(0, tau = tau.param)      # probability of observing a dead mouse
-    p.u[s] ~ dnorm(0, tau = tau.param)    # probability of marking an alive mouse as unknown tick status 
-    logit(p.a.rate[s]) <- p.a[s]
-    logit(p.p.rate[s]) <- p.p[s]
-    logit(p.d.rate[s]) <- p.d[s]
-    logit(p.u.rate[s]) <- p.u[s]
+    p.a.site[s] ~ dnorm(0, tau.p.a.site)
+    p.p.site[s] ~ dnorm(0, tau.p.p.site)
+    p.d.site[s] ~ dnorm(0, tau.p.d.site)
+    p.u.site[s] ~ dnorm(0, tau.p.u.site)
+     
+    logit(p.a.rate[s]) <- p.a + p.a.site[s]
+    logit(p.p.rate[s]) <- p.p + p.p.site[s]
+    logit(p.d.rate[s]) <- p.d + p.d.site[s]
+    logit(p.u.rate[s]) <- p.u + p.u.site[s]
     
     phi.p.site[s] ~ dnorm(0, tau = tau.phi.p.site)
     phi.a.site[s] ~ dnorm(0, tau = tau.phi.a.site)
@@ -153,6 +163,10 @@ monitor <- c(
   "tau.phi.a.site",
   "tau.psi.pa.site",
   "tau.psi.ap.site",
+  "tau.p.p.site",
+  "tau.p.a.site",
+  "tau.p.d.site",
+  "tau.p.u.site",
   "phi.p.site",
   "phi.a.site",
   "psi.pa.site",
@@ -161,6 +175,10 @@ monitor <- c(
   "phi.p",
   "psi.ap",
   "psi.pa",
+  "p.a.site",
+  "p.p.site",
+  "p.d.site",
+  "p.u.site",  
   "p.a",
   "p.p",
   "p.d",
