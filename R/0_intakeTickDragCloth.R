@@ -16,8 +16,8 @@ library(neonstore)
 product <- "DP1.10093.001"
 neon_download(product = product)
 
-tick.field.raw <- neon_read("tck_fielddata") 
-tick.taxon.raw <- neon_read("tck_taxonomyProcessed")
+tick.field.raw <- neon_read("tck_fielddata-basic", keep_filename = TRUE)
+tick.taxon.raw <- neon_read("tck_taxonomyProcessed_basic")
 
 # there are lots of reasons why sampling didn't occur (logistics, too wet, too cold, etc.)
 # so, keep records when sampling occurred
@@ -113,13 +113,15 @@ df.nymph.adult <- target.ls %>%
 df.all.stages <- bind_rows(df.larva.sum, df.nymph.adult)
 df <- left_join(df.all.stages, cols.keep, by = c("occasionID", "lifeStage"))
 
-df.standard <- df %>%
-  group_by(siteID, plotID, time, scientificName, lifeStage) %>% 
-  summarise(totalCount = sum(processedCount),
-            totalArea = sum(totalSampledArea),
-            standardCount = totalCount / totalArea * 1600)
 
-target <- left_join(df.standard, nlcd.tb, by = "plotID")
+# df.standard <- df %>%
+#   group_by(siteID, plotID, time, scientificName, lifeStage) %>% 
+#   summarise(totalCount = sum(processedCount),
+#             totalArea = sum(totalSampledArea),
+#             standardCount = totalCount / totalArea * 1600)
+# target <- left_join(df.standard, nlcd.tb, by = "plotID")
+
+target <- df 
 
 write_csv(tick.joined, "Data/tickWide.csv")
 write_csv(tick.long, "Data/tickLong.csv")
