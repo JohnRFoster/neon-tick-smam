@@ -2,6 +2,8 @@
 # all demographic parameters are constant and estimated daily
 # process error is estimated via MVN with SDs on the diagonal
 
+# this model is for Ixodes 
+
 
 
 library(nimble)
@@ -20,9 +22,6 @@ model.code <- nimbleCode({
   
   for(i in 1:ns){
     sig[i] ~ dinvgamma(0.001, 0.001)  
-  }
-  for(q in 1:3){
-    tau.obs[q] ~ dinvgamma(0.001, 0.001)  
   }
   
   ### precision priors
@@ -118,18 +117,17 @@ model.code <- nimbleCode({
     
     ### Data Model ###
     for(d in 1:n.occ.plot[p]){
+      dx[1,d,p] <- x[1,d,p] * area.sampled[p,d]
+      dx[2,d,p] <- x[3,d,p] * area.sampled[p,d]
+      dx[3,d,p] <- x[4,d,p] * area.sampled[p,d]
       
       ## fit the blended model to observed data 
-      y[1,d,p] ~ dnorm(x[1,d,p], tau = tau.obs[1])
-      y[3,d,p] ~ dnorm(x[3,d,p], tau = tau.obs[2])
-      y[4,d,p] ~ dnorm(x[4,d,p], tau = tau.obs[3])
+      y[1,d,p] ~ dpois(dx[1,d,p])
+      y[3,d,p] ~ dpois(dx[2,d,p])
+      y[4,d,p] ~ dpois(dx[3,d,p])
       
     } # t
   }
-  
-  
-  
-  
 })
 
 monitor <- c("x",
@@ -140,5 +138,4 @@ monitor <- c("x",
              "theta.na",
              "repro.mu",
              "sig",
-             "tau.obs",
              "tau.gdd")
