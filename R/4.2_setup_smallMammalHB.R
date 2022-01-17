@@ -217,23 +217,30 @@ inits <- function(){list(
   phi.p = jitter(mu["phi.p"]),
   psi.ap = jitter(mu["psi.ap"]),
   psi.pa = jitter(mu["psi.pa"]),
-  phi.p.site = jitter(mu[grep("phi.p.site[", names(mu), fixed = TRUE)]),
-  phi.a.site = jitter(mu[grep("phi.a.site[", names(mu), fixed = TRUE)]),
-  psi.pa.site = jitter(mu[grep("psi.pa.site[", names(mu), fixed = TRUE)]),
-  psi.ap.site = jitter(mu[grep("psi.ap.site[", names(mu), fixed = TRUE)]),
+  phi.p.site = rnorm(n.site, 4, 1),
+  phi.a.site = rnorm(n.site, 4, 1),
+  psi.pa.site = rnorm(n.site, 0, 1),
+  psi.ap.site = rnorm(n.site, 0, 1),
+  p.p.site = rnorm(n.site, 0, 1),
+  p.a.site = rnorm(n.site, 0, 1),
+  p.d.site = rnorm(n.site, 0, 1),
+  p.u.site = rnorm(n.site, 0, 1),
   tau.phi.p.site = jitter(mu["tau.phi.p.site"]),
   tau.phi.a.site = jitter(mu["tau.phi.a.site"]),
   tau.psi.pa.site = jitter(mu["tau.psi.pa.site"]),
   tau.psi.ap.site = jitter(mu["tau.psi.ap.site"]),
-  p.a = jitter(mu[grep("p.a[", names(mu), fixed = TRUE)]),
-  p.p = jitter(mu[grep("p.p[", names(mu), fixed = TRUE)]),
-  p.d = jitter(mu[grep("p.d[", names(mu), fixed = TRUE)]),
-  p.u = jitter(mu[grep("p.u[", names(mu), fixed = TRUE)])
+  tau.p.p.site = abs(rnorm(1, 10, 3)),
+  tau.p.a.site = abs(rnorm(1, 10, 3)),
+  tau.p.u.site = abs(rnorm(1, 10, 3)),
+  tau.p.d.site = abs(rnorm(1, 10, 3)),
+  p.a = rnorm(1, 0, 1),
+  p.p = rnorm(1, 0, 1),
+  p.d = rnorm(1, -3, 1),
+  p.u = rnorm(1, -3, 1)
 )}
 
 
 message(paste0("Capture history matrix has ", nrow(ch), " rows and ", ncol(ch), " columns"))
-source("R/2.3_multiStateHBDailySurvivalTransition.R")
 
 # n.slots <- 1
 if(n.slots >= 2){
@@ -253,7 +260,7 @@ if(n.slots >= 2){
     thin = thin,
     check.interval = 5,
     max.iter = max.iter,
-    save.states = TRUE,
+    calculate = FALSE,
     file.name = file.path(site.dir, "NIMBLE_check.RData")
   )
   stopCluster(cl)
@@ -271,8 +278,8 @@ if(n.slots >= 2){
                             inits = inits())
   modelBlock$initializeInfo()
   cModelBlock <- compileNimble(modelBlock)
-  mcmcConfBlock <- configureMCMC(cModelBlock,
-                                 monitors = monitor)
+  mcmcConfBlock <- configureMCMC(cModelBlock)
+                                 # monitors = monitor)
   
   # mcmcConfBlock$removeSampler(c("psi.ap", "psi.pa"))
   # mcmcConfBlock$addSampler(target = c("psi.ap", "psi.pa"), type = "RW_block")
