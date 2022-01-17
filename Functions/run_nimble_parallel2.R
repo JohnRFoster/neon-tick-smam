@@ -17,32 +17,31 @@
 #' @param psrf.max the maximum value allowed for convergence (R_hat threshold)
 #' @param min.effective.size the minimum number of effective samples allowed
 #' @param max.iter the maximum number of iterations before sampling stops
-#' @param save.states are we going to save latent state samples? default TRUE
+#' @param calculate are we going to save latent state samples? default TRUE
 
 run_nimble_parallel <- function(cl, model, constants, data, inits, monitor, file.name = NA,
                                 use.dzip = FALSE, n.ens = 5000, check.interval = 10, thin = 1,
                                 n.iter = 50000, n.burnin = 5000, psrf.max = 1.1, min.effective.size = 2000,
-                                max.iter = 3e6, save.states = TRUE){
+                                max.iter = 3e6, calculate = TRUE){
   library(parallel)
   library(nimble)
   library(coda)
-  
+  source("Functions/nimble_functions.R")
   n.cores <- length(cl) # number of cores used
   
   # export everything we need to cluster nodes
+  clusterExport(cl, 
+                c("model", "constants", "data", "if_else_nimble", "calculate",
+                  "n.iter", "n.burnin", "monitor", "thin", "n.cores"),
+                envir = environment()) 
+  
   if(use.dzip){
     source("Functions/ZIP.R")
     assign("dZIP", dZIP, envir = .GlobalEnv)
     assign("rZIP", rZIP, envir = .GlobalEnv)
     clusterExport(cl, 
-                  c("model", "constants", "data", "n.iter", "n.burnin",
-                    "dZIP", "rZIP", "monitor", "thin", "n.cores"),
+                  c("dZIP", "rZIP"),
                   envir = environment())  
-  } else {
-    clusterExport(cl, 
-                  c("model", "constants", "data", 
-                    "n.iter", "n.burnin", "monitor", "thin", "n.cores"),
-                  envir = environment()) 
   }
   
   # export inits to clusters
@@ -63,7 +62,7 @@ run_nimble_parallel <- function(cl, model, constants, data, inits, monitor, file
                             constants = constants,
                             data = data,
                             inits = init,
-                            calculate = FALSE)
+                            calculate = calculate)
     cModel.rw <- compileNimble(model.rw)
     mcmcConf <- configureMCMC(cModel.rw, 
                               monitors = monitor,
@@ -73,8 +72,8 @@ run_nimble_parallel <- function(cl, model, constants, data, inits, monitor, file
     # mcmcConf$removeSampler(c("phi.a", "phi.p"))
     # mcmcConf$addSampler(target = c("phi.a", "phi.p"), type = "RW_block")
 
-    mcmcConf$removeSampler(c("psi.ap", "psi.pa"))
-    mcmcConf$addSampler(target = c("psi.ap", "psi.pa"), type = "RW_block")
+    # mcmcConf$removeSampler(c("psi.ap", "psi.pa"))
+    # mcmcConf$addSampler(target = c("psi.ap", "psi.pa"), type = "RW_block")
 
     # mcmcConf$removeSampler(c("p.a", "p.p", "p.d", "p.u"))
     # mcmcConf$addSampler(target = c("p.a", "p.p", "p.d", "p.u"), type = "RW_block")
@@ -101,7 +100,10 @@ run_nimble_parallel <- function(cl, model, constants, data, inits, monitor, file
   g.diag <- gelman.diag(check.mcmc, multivariate = FALSE)$psrf
   convergence <- max(g.diag[,"Upper C.I."]) < psrf.max
   message(paste("Convergence:", convergence)) 
-  if(is.na(convergence)) print(g.diag)
+  if(is.na(convergence)){
+    print(g.diag)
+    convergence <- FALSE
+  } 
   
   # effective sample size
   effect.sizes <- effectiveSize(check.mcmc)
@@ -135,7 +137,16 @@ run_nimble_parallel <- function(cl, model, constants, data, inits, monitor, file
     }
     
     g.diag <- gelman.diag(check.mcmc, multivariate = FALSE)$psrf
+    convergence <- max(g.diag[,"Upper C.I."]) < psrf.max
+    message(paste("Convergence:", convergence))  
+    if(is.na(convergence)) convergence <- FALSE
+    
     effect.sizes <- effectiveSize(check.mcmc)
+    enough.samples <- min(effect.sizes) >= min.effective.size
+    message(paste("Enough Effective Samples:", enough.samples))
+    
+    message(paste("Total iterations:", total.iter))
+    if(total.iter > max.iter) break
     
     if(counter %% check.interval == 0) {
       message("Convergence check:")
@@ -154,14 +165,6 @@ run_nimble_parallel <- function(cl, model, constants, data, inits, monitor, file
     } else {
       resetMV <- FALSE
     }
-    
-    convergence <- max(g.diag[,"Upper C.I."]) < psrf.max
-    enough.samples <- min(effect.sizes) >= min.effective.size
-    message(paste("Convergence:", convergence))  
-    message(paste("Enough Effective Samples:", enough.samples))
-    message(paste("Total iterations:", total.iter))
-    
-    if(total.iter > max.iter) break
   }
   
   if(convergence & enough.samples){ #
